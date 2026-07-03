@@ -1,0 +1,21 @@
+# --- Local / internal (never commit) ---
+# Internal infra details: hostnames, IPs, ports, network topology
+docs/infra.local.md
+*.local.md
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+
+# --- Python (Phase 0 stack) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/

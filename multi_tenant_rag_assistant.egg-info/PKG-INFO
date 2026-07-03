@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: multi-tenant-rag-assistant
+Version: 0.0.0
+Summary: Multi-tenant RAG assistant over private data
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.32
+Requires-Dist: pydantic-settings>=2.6
+Provides-Extra: dev
+Requires-Dist: ruff>=0.8; extra == "dev"
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: httpx>=0.27; extra == "dev"
