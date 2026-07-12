@@ -86,14 +86,26 @@ project. Two goals drive every decision: practice **DevOps** and work through
 ## Current status
 
 - Planning complete. Roadmap written (`docs/roadmap.md`); infra mapped above.
-- **Phase 0 — DONE.** Scaffolding in place: `docker-compose.yml` (FastAPI +
-  Postgres/pgvector + nginx), `/health` endpoint + pytest, config via
-  pydantic-settings, CI (ruff + pytest + gitleaks), pre-commit, `.env.example`,
-  `.dockerignore`. Verified: `docker compose up` → `curl localhost:8080/health`
-  returns `ok`; CI green on push.
-- **Next up — Phase 1:** RAG core, single-tenant. Claude API inference;
-  ingestion (chunk → embed → pgvector); retrieval; chat API + minimal UI; DB
-  migrations; first eval suite (faithfulness/relevancy) as a CI gate.
-  *Done when* RAG answers over synthetic data and the eval gate is green in CI.
+- **Phase 0 — DONE.** Scaffolding: `docker-compose.yml` (FastAPI +
+  Postgres/pgvector + nginx), `/health` + pytest, pydantic-settings config, CI
+  (ruff + pytest + gitleaks), pre-commit. Verified `docker compose up` →
+  `/health` returns `ok`; CI green.
+- **Phase 1 — DONE (single-tenant RAG core).** End-to-end pipeline:
+  - **Schema/migrations:** Alembic + `documents`/`chunks(embedding vector(384))`
+    + HNSW cosine index (`migrations/`, `app/config.py`).
+  - **Ingestion:** `data/kb/*.md` → token-based chunking (with boundary check)
+    → e5 `passage:` embeddings → pgvector (`app/ingest.py`, `app/embeddings.py`,
+    `app/db.py`).
+  - **Retrieval:** e5 `query:` → cosine top-k over pgvector (`app/retrieval.py`).
+  - **Chat:** `POST /chat` → retrieve → context-as-data prompt → Claude →
+    `{answer, sources}` (`app/rag.py`, `app/main.py`). Guardrails: injection
+    hygiene (LLM01), input/`max_tokens` caps (LLM10).
+  - **Eval:** golden set + deterministic retrieval gate in CI (top-1, no key) +
+    local LLM-judge faithfulness/relevancy (`eval/`, `.github/workflows/ci.yml`).
+  - Inference `claude-haiku-4-5` (dev); embeddings `multilingual-e5-small` local.
+  - *DoD met:* RAG answers over synthetic data; eval gate green in CI.
+- **Next up — Phase 2:** multi-tenancy + isolation. Tenants, per-tenant data,
+  Postgres Row-Level Security on `chunks`/`documents` (LLM08/LLM02). This is the
+  core of B. UI (Phase 1 step 5) deferred to `docs/backlog.md`.
 - Keep this section current — it is the fastest way for a new session to know
   where we are.

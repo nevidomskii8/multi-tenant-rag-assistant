@@ -20,6 +20,42 @@ jobs:
       - name: Tests
         run: pytest -q
 
+  eval-gate:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-multilingual-e5-small
+      - name: Run migrations
+        run: alembic upgrade head
+      - name: Ingest synthetic KB
+        run: python -m app.ingest
+      - name: Retrieval gate
+        run: python -m eval.gate
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:

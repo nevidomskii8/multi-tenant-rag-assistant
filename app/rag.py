@@ -37,11 +37,8 @@ def _format_context(hits: list[dict]) -> str:
 
 def answer(question: str, k: int = 4) -> dict:
     hits = retrieve(question, k)
-    prompt = (
-        "Reference context:\n"
-        f"<context>\n{_format_context(hits)}\n</context>\n\n"
-        f"Question: {question}"
-    )
+    context = _format_context(hits)
+    prompt = f"Reference context:\n<context>\n{context}\n</context>\n\nQuestion: {question}"
     resp = _client().messages.create(
         model=settings.claude_model,
         max_tokens=1024,
@@ -52,7 +49,9 @@ def answer(question: str, k: int = 4) -> dict:
     return {
         "answer": text,
         "sources": [
-            {"title": h["title"], "source": h["source"], "score": h["score"]}
-            for h in hits
+            {"title": h["title"], "source": h["source"], "score": h["score"]} for h in hits
         ],
+        # Exact context sent to the model. Eval grades faithfulness against THIS,
+        # so the judge sees precisely what the model saw. Not exposed by /chat.
+        "context": context,
     }

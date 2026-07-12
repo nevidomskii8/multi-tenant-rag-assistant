@@ -54,9 +54,7 @@ def chunk_text(
         chunk = tok.decode(window, skip_special_tokens=True).strip()
         total = overhead + len(tok.encode(chunk, add_special_tokens=False))
         if total > limit:
-            raise ValueError(
-                f"chunk of {total} tokens exceeds model limit {limit}; lower `size`"
-            )
+            raise ValueError(f"chunk of {total} tokens exceeds model limit {limit}; lower `size`")
         chunks.append(chunk)
         if start + size >= len(ids):
             break
@@ -68,16 +66,19 @@ def ingest_file(conn, path: Path) -> int:
     if not text:
         return 0
     title = text.splitlines()[0].lstrip("# ").strip()
+    # Stable, OS-independent key (forward slashes) that matches eval/golden.json.
+    # Repo-root-relative by convention — ingest is run from the project root.
+    source = path.as_posix()
     chunks = chunk_text(text, tokenizer(), limit=max_seq_length())
     embeddings = embed_passages(chunks)
 
     with conn.cursor() as cur:
         # Idempotent re-ingest: drop any prior version of this source first
         # (chunks cascade via the FK), then insert fresh.
-        cur.execute("DELETE FROM documents WHERE source = %s", (str(path),))
+        cur.execute("DELETE FROM documents WHERE source = %s", (source,))
         cur.execute(
             "INSERT INTO documents (title, source) VALUES (%s, %s) RETURNING id",
-            (title, str(path)),
+            (title, source),
         )
         doc_id = cur.fetchone()[0]
         for idx, (content, emb) in enumerate(zip(chunks, embeddings, strict=True)):

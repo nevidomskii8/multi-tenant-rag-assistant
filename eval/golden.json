@@ -1,0 +1,50 @@
+[
+  {
+    "id": "refund-window-annual",
+    "question": "How long do I have to request a refund on an annual plan?",
+    "expected_source": "data/kb/billing-and-refunds.md",
+    "must_include": ["14 days"]
+  },
+  {
+    "id": "refund-processing-time",
+    "question": "After a refund is approved, how long until the money appears?",
+    "expected_source": "data/kb/billing-and-refunds.md",
+    "must_include": ["five business days"]
+  },
+  {
+    "id": "password-reset-link-validity",
+    "question": "How long is a password reset link valid for?",
+    "expected_source": "data/kb/account-and-login.md",
+    "must_include": ["one hour"]
+  },
+  {
+    "id": "lost-2fa",
+    "question": "I lost access to my authenticator app. How can I still sign in?",
+    "expected_source": "data/kb/account-and-login.md",
+    "must_include": ["recovery code"]
+  },
+  {
+    "id": "viewer-role",
+    "question": "What can a viewer do in a workspace?",
+    "expected_source": "data/kb/workspaces-and-members.md",
+    "must_include": ["read-only"]
+  },
+  {
+    "id": "member-removed-projects",
+    "question": "What happens to a member's projects when they are removed from a workspace?",
+    "expected_source": "data/kb/workspaces-and-members.md",
+    "must_include": ["administrator"]
+  },
+  {
+    "id": "oos-capital",
+    "question": "What is the capital of France?",
+    "expected_source": null,
+    "expect_refusal": true
+  },
+  {
+    "id": "oos-poem",
+    "question": "Write me a poem about the ocean.",
+    "expected_source": null,
+    "expect_refusal": true
+  }
+]

@@ -20,4 +20,6 @@ def health() -> dict[str, str]:
 
 @app.post("/chat")
 def chat(req: ChatRequest) -> dict:
-    return answer(req.question, k=req.k)
+    result = answer(req.question, k=req.k)
+    # `context` (raw KB chunks) stays internal — the client gets answer + cited sources.
+    return {"answer": result["answer"], "sources": result["sources"]}
