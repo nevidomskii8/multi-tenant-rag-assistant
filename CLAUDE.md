@@ -86,10 +86,14 @@ project. Two goals drive every decision: practice **DevOps** and work through
 ## Current status
 
 - Planning complete. Roadmap written (`docs/roadmap.md`); infra mapped above.
-- **Code: not started.**
-- **Next up — Phase 0:** project scaffolding — repo structure, `docker-compose.yml`
-  (FastAPI + Postgres/pgvector + nginx), first GitHub Actions workflow
-  (lint + tests), `.gitignore`, pre-commit, gitleaks. *Done when* `docker compose up`
-  brings up the skeleton and CI is green on push.
+- **Phase 0 — DONE.** Scaffolding in place: `docker-compose.yml` (FastAPI +
+  Postgres/pgvector + nginx), `/health` endpoint + pytest, config via
+  pydantic-settings, CI (ruff + pytest + gitleaks), pre-commit, `.env.example`,
+  `.dockerignore`. Verified: `docker compose up` → `curl localhost:8080/health`
+  returns `ok`; CI green on push.
+- **Next up — Phase 1:** RAG core, single-tenant. Claude API inference;
+  ingestion (chunk → embed → pgvector); retrieval; chat API + minimal UI; DB
+  migrations; first eval suite (faithfulness/relevancy) as a CI gate.
+  *Done when* RAG answers over synthetic data and the eval gate is green in CI.
 - Keep this section current — it is the fastest way for a new session to know
   where we are.
