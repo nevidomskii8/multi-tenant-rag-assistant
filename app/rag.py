@@ -8,6 +8,7 @@ Security posture (OWASP LLM Top 10):
   layer caps question length and k.
 """
 
+import re
 from functools import lru_cache
 
 from anthropic import Anthropic
@@ -32,7 +33,11 @@ def _client() -> Anthropic:
 
 
 def _format_context(hits: list[dict]) -> str:
-    return "\n\n".join(f"[Source: {h['title']}]\n{h['content']}" for h in hits)
+    # Strip <context>/</context> from chunk content so a malicious document
+    # cannot break out of the wrapper tag and pose as instructions (LLM01).
+    return "\n\n".join(
+        f"[Source: {h['title']}]\n{re.sub(r'</?context>', '', h['content'])}" for h in hits
+    )
 
 
 def answer(question: str, k: int = 4) -> dict:
