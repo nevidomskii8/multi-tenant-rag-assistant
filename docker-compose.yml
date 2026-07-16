@@ -21,6 +21,12 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-dev}
       DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
+      # Request path runs as the non-owner app_rt role so RLS is enforced.
+      APP_RT_PASSWORD: ${APP_RT_PASSWORD:-app_rt}
+      RUNTIME_DATABASE_URL: postgresql://app_rt:${APP_RT_PASSWORD:-app_rt}@db:5432/${POSTGRES_DB:-app}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-change-me}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-haiku-4-5}
     volumes:

@@ -13,6 +13,8 @@ dependencies = [
     "alembic>=1.14",
     "pgvector>=0.3",
     "sentence-transformers>=3.3",
+    "pyjwt>=2.10",
+    "bcrypt>=4.2",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +37,10 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom puts Depends()/Security() in defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Security", "fastapi.Query"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

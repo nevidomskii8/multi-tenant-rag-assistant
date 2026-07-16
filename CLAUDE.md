@@ -104,8 +104,24 @@ project. Two goals drive every decision: practice **DevOps** and work through
     local LLM-judge faithfulness/relevancy (`eval/`, `.github/workflows/ci.yml`).
   - Inference `claude-haiku-4-5` (dev); embeddings `multilingual-e5-small` local.
   - *DoD met:* RAG answers over synthetic data; eval gate green in CI.
-- **Next up — Phase 2:** multi-tenancy + isolation. Tenants, per-tenant data,
-  Postgres Row-Level Security on `chunks`/`documents` (LLM08/LLM02). This is the
-  core of B. UI (Phase 1 step 5) deferred to `docs/backlog.md`.
+- **Phase 2 — DONE (rooms, membership & RLS isolation).** The security core of B:
+  - **Room model:** `users`/`rooms`/`memberships` (M:N). A room is a shareable RAG
+    space; flat membership (owner adds members); the room is the isolation unit
+    (`migrations/0002`, ADR-004). `documents`/`chunks` gained `room_id` (chunks
+    denormalized + composite FK to keep chunk↔document rooms in lock-step).
+  - **Isolation:** Postgres RLS enforced through a **non-owner runtime role
+    `app_rt`** (superuser/owner bypass RLS, so the request path must not be `app`)
+    + per-request `SET LOCAL app.user_id`; read + write policies, deny-by-default.
+    `app` stays admin-only (migrations/seed). Password from `APP_RT_PASSWORD` env.
+  - **Auth:** local JWT issuer (bcrypt + pyjwt HS256), `get_current_user` Bearer.
+  - **API:** `/auth/register|login`, `POST /rooms`, `/rooms/{id}/members` (owner),
+    `/rooms/{id}/documents` (member upload — first "writer" under write-side RLS),
+    `/chat` (Bearer + room_id; non-member → 404, anti-enumeration).
+  - *DoD met:* a non-member can't read OR write a room's data — proven by
+    `tests/test_isolation.py` at the DB layer and the API layer; eval gate runs
+    through RLS and stays green in CI.
+- **Next up — Phase 3:** guardrails (llm-guard on input/output: PII redaction,
+  injection detection), private PII records (tickets/orders) room-scoped under RLS,
+  audit logs (LLM02/LLM07). See `docs/roadmap.md`.
 - Keep this section current — it is the fastest way for a new session to know
   where we are.
