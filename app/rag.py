@@ -14,10 +14,13 @@ from functools import lru_cache
 from anthropic import Anthropic
 
 from app.config import settings
+from app.db import session_for_user
 from app.retrieval import retrieve
 
+# Generic identity: this is now a multi-room assistant, so the system prompt is
+# not tied to any single tenant. (Per-room personalization → backlog.)
 SYSTEM = (
-    "You are a customer-support assistant for Cloudberry.\n"
+    "You are a helpful customer-support assistant.\n"
     "Answer the user's question using ONLY the reference context provided in the "
     "user message. If the context does not contain the answer, say you don't know "
     "instead of guessing.\n"
@@ -40,8 +43,11 @@ def _format_context(hits: list[dict]) -> str:
     )
 
 
-def answer(question: str, k: int = 4) -> dict:
-    hits = retrieve(question, k)
+def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
+    # Retrieve inside an RLS-scoped transaction: the caller only ever sees chunks
+    # from rooms they belong to. The Claude call runs after, outside the DB tx.
+    with session_for_user(user_id) as conn:
+        hits = retrieve(conn, question, k, room_id=room_id)
     context = _format_context(hits)
     prompt = f"Reference context:\n<context>\n{context}\n</context>\n\nQuestion: {question}"
     resp = _client().messages.create(

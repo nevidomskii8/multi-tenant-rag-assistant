@@ -7,6 +7,26 @@ on:
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Admin (owner/superuser) for migrations; app_rt (non-owner) for the RLS
+      # path the isolation tests exercise.
+      DATABASE_URL: postgresql://app:app@localhost:5432/app
+      APP_RT_PASSWORD: app_rt
+      RUNTIME_DATABASE_URL: postgresql://app_rt:app_rt@localhost:5432/app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,6 +37,8 @@ jobs:
         run: ruff check .
       - name: Ruff format check
         run: ruff format --check .
+      - name: Run migrations (creates app_rt + RLS policies)
+        run: alembic upgrade head
       - name: Tests
         run: pytest -q
 
@@ -38,6 +60,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://app:app@localhost:5432/app
+      APP_RT_PASSWORD: app_rt
+      RUNTIME_DATABASE_URL: postgresql://app_rt:app_rt@localhost:5432/app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,9 +75,7 @@ jobs:
           key: hf-multilingual-e5-small
       - name: Run migrations
         run: alembic upgrade head
-      - name: Ingest synthetic KB
-        run: python -m app.ingest
-      - name: Retrieval gate
+      - name: Retrieval gate (seeds the eval room, retrieves under RLS)
         run: python -m eval.gate
 
   gitleaks:

@@ -19,6 +19,24 @@ phase reaches it, or promote to a GitHub issue labeled `backlog`.
   starlette.testclient is deprecated; install httpx2`. Non-blocking; resolve
   when convenient.
 
+## From Phase 2 (rooms & isolation)
+
+- **RBAC roles** (owner/editor/viewer) and **owner-only document management**:
+  currently any member may write to a room. Add finer-grained roles + policies.
+- **Org/company umbrella** above rooms (a tenant grouping over rooms).
+- **Full room CRUD/UI**: rename/delete rooms, list my rooms, remove members,
+  leave a room. Phase 2 ships only create-room / add-member / upload.
+- **Email + LLM-agent writers**: reuse the `POST /rooms/{id}/documents` RLS write
+  path, but they ingest untrusted content → the EchoLeak surface → **Phase C**
+  (with provenance checks + tool-permission scoping), not a plain connector.
+- **User-enumeration hardening**: `users` is intentionally outside RLS (auth
+  needs email lookup) and registration reveals email-taken via 409. Add rate
+  limiting / uniform responses if this becomes a concern.
+- **Refresh tokens / logout / token revocation**: JWTs are currently stateless
+  and only expire. Add rotation if sessions need to be invalidated.
+- **File upload (multipart)** for `POST /rooms/{id}/documents`: today it accepts
+  JSON `{title, content}`; add real file upload (pdf/md/txt parsing).
+
 ## Eval hardening (deferred, low priority)
 
 - **Judge-based refusal check**: `eval/run.py` detects refusals with a keyword
