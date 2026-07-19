@@ -188,6 +188,44 @@ def test_member_can_write_and_read_own_room(admin):
         assert cur.fetchone()[0] == 1
 
 
+def test_nonmember_cannot_self_enrol(admin):
+    """Regression for the 0003 fix: a user must not add THEMSELVES to a room they
+    don't own, then read its data. The 0002 `memberships_insert` policy allowed
+    self-insert into any room_id (privilege escalation); 0003 restricts inserts to
+    rooms the caller owns."""
+    alice = make_user(admin, "alice@db")
+    mallory = make_user(admin, "mallory@db")
+    room_a = make_room(admin, "alice-private", alice)
+    seed_chunk(admin, room_a, content="alice secret")
+
+    with pytest.raises(InsufficientPrivilege):
+        with session_for_user(mallory) as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO memberships (user_id, room_id, role) VALUES (%s, %s, 'member')",
+                (mallory, room_a),
+            )
+
+    # And the boundary still holds: Mallory sees nothing.
+    with session_for_user(mallory) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM chunks WHERE room_id = %s", (room_a,))
+        assert cur.fetchone()[0] == 0
+
+
+def test_owner_bootstrap_still_works_after_0003(admin):
+    """The tightened policy must not break the create-room path: creating a room
+    and enrolling yourself as its owner (via the RLS-scoped connection) still
+    succeeds, because branch (B) sees the just-created owned room in-transaction."""
+    alice = make_user(admin, "alice@db")
+    from app.rooms import create_room
+
+    with session_for_user(alice) as conn:
+        room_id = create_room(conn, "alice-room", alice)
+
+    with session_for_user(alice) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM memberships WHERE room_id = %s", (room_id,))
+        assert cur.fetchone()[0] == 1
+
+
 def test_shared_room_visible_to_all_members(admin):
     alice = make_user(admin, "alice@db")
     bob = make_user(admin, "bob@db")
