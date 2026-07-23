@@ -1,0 +1,23 @@
+[
+  {
+    "full_name": "Alice Johnson",
+    "email": "alice.johnson@example.com",
+    "phone": "+1-202-555-0143",
+    "address": "742 Evergreen Terrace, Springfield",
+    "notes": "Prefers email contact. On the enterprise trial; evaluating for a 40-seat rollout."
+  },
+  {
+    "full_name": "Bob Martinez",
+    "email": "bob.martinez@example.com",
+    "phone": "+1-202-555-0177",
+    "address": "1600 Rledge Road, Washington",
+    "notes": "Escalated double-charge refund case. Sensitive — handle promptly."
+  },
+  {
+    "full_name": "Carol Nguyen",
+    "email": "carol.nguyen@example.com",
+    "phone": "+1-202-555-0198",
+    "address": "350 Fifth Avenue, New York",
+    "notes": "Power user; requested dark mode. Happy to be a reference customer."
+  }
+]

@@ -120,8 +120,11 @@ project. Two goals drive every decision: practice **DevOps** and work through
   - *DoD met:* a non-member can't read OR write a room's data — proven by
     `tests/test_isolation.py` at the DB layer and the API layer; eval gate runs
     through RLS and stays green in CI.
-- **Next up — Phase 3:** guardrails (llm-guard on input/output: PII redaction,
-  injection detection), private PII records (tickets/orders) room-scoped under RLS,
-  audit logs (LLM02/LLM07). See `docs/roadmap.md`.
+- **Next up — Phase 3 (PLANNED, not started):** guardrails (llm-guard on
+  input/output: PII redaction, injection detection), private PII records
+  (tickets/orders/profiles) room-scoped under RLS, audit logs (LLM02/LLM07).
+  Architecture locked in **ADR-005** (llm-guard **sidecar** · Postgres `audit_log`
+  under RLS · PII **embedded into RAG**); build order + DoD in `docs/devlog.md`
+  (2026-07-21 entry). See also `docs/roadmap.md` Phase 3.
 - Keep this section current — it is the fastest way for a new session to know
   where we are.

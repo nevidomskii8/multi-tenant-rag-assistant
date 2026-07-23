@@ -1,0 +1,20 @@
+[
+  {
+    "customer_email": "alice.johnson@example.com",
+    "item": "Pro subscription (annual)",
+    "amount_cents": 9900,
+    "status": "delivered"
+  },
+  {
+    "customer_email": "bob.martinez@example.com",
+    "item": "Extra seat add-on",
+    "amount_cents": 1500,
+    "status": "placed"
+  },
+  {
+    "customer_email": "carol.nguyen@example.com",
+    "item": "Onboarding support pack",
+    "amount_cents": 4900,
+    "status": "shipped"
+  }
+]

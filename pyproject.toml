@@ -15,13 +15,15 @@ dependencies = [
     "sentence-transformers>=3.3",
     "pyjwt>=2.10",
     "bcrypt>=4.2",
+    # Request-path HTTP client for the llm-guard sidecar (Phase 3). Also pulled in
+    # transitively by anthropic, but the guardrail call depends on it directly.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.8",
     "pytest>=8.3",
-    "httpx>=0.27",
 ]
 
 [build-system]
