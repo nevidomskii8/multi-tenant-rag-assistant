@@ -28,5 +28,18 @@ class Settings(BaseSettings):
     embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
 
+    # Guardrail sidecar (Phase 3, llm-guard). Calls are FAIL-CLOSED: if the sidecar
+    # is unreachable or errors, the request is denied — a down guard degrades
+    # availability, not safety (ADR-005). auth_token is the Bearer the sidecar's
+    # http_bearer auth expects; must be set to match the sidecar's AUTH_TOKEN.
+    guardrails_url: str = "http://llm-guard-api:8000"
+    guardrails_auth_token: str = ""
+    guardrails_timeout_seconds: float = 30.0
+    # System-prompt-leak tripwire (LLM07): embedded in the SYSTEM prompt with a
+    # non-disclosure instruction; the sidecar's output BanSubstrings scanner bans
+    # it. MUST match the substring in guardrails/scanners.yml. A tripwire, not a
+    # credential — its value being public is fine.
+    guardrails_canary: str = "CANARY-LLM07-do-not-reveal-4f2a9c"
+
 
 settings = Settings()

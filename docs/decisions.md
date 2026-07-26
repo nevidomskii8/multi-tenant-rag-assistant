@@ -2,6 +2,44 @@
 
 Newest first. Format: context → decision → consequences.
 
+## ADR-005 — Phase 3 guardrail layer: llm-guard sidecar + Postgres audit table (2026-07-21)
+
+**Context:** Phase 3 is the security layer of B: catch injected PII and jailbreaks
+on the RAG path and prove it (OWASP LLM02 sensitive-info disclosure, LLM07 system-
+prompt leakage; reinforces LLM01). This needs a place to run PII/injection scanners,
+a home for audit events, and real PII flowing through the pipeline so the guards are
+meaningfully exercised. Three sub-decisions follow.
+
+**Decision:**
+- **llm-guard runs as a sidecar container**, not in-process. It pulls in
+  Presidio/spaCy plus a DeBERTa injection model (~1GB); loading that next to the
+  in-process e5 embedder would bloat the app image, slow startup, and couple two
+  failure domains. A separate `llm-guard-api` service (pinned, healthchecked) in
+  `docker-compose.yml`; the app calls it over HTTP via `app/guardrails.py`
+  (`scan_input` / `scan_output`), **fail-closed** on error. Matches the roadmap's
+  "as a container" and keeps the heavy models independently scalable. Cost: a
+  network hop and one more service to run in CI.
+- **Audit events land in a room-scoped Postgres `audit_log` table**, under the same
+  RLS + `app_rt` pattern as `documents`/`chunks` (a caller reads only their own
+  rooms' events). Durable and assertable in regression tests *now*; Loki can tail it
+  in Phase 5. Chosen over stdout-only JSON, which isn't queryable/testable at the DB
+  layer yet. Full alerting/dashboards stay deferred to Phase 5.
+- **PII records are embedded into the RAG path.** New room-scoped `tickets`,
+  `orders`, `customer_profiles` tables (Phase 2 isolation pattern) are rendered to
+  text, chunked, e5-embedded, and stored in `chunks` with their `room_id`, so `/chat`
+  can surface them and the input/output redaction is exercised end-to-end. Chosen
+  over a structured-lookup-only endpoint for realism; a structured room-scoped query
+  path is left to the Phase C agent-tool work.
+
+**Consequences:**
+- Guardrail failures deny the request (fail-closed), so a down sidecar degrades
+  availability, not safety — acceptable for the security posture.
+- Real PII lives in the vector store, so cross-room retrieval isolation (LLM08,
+  already pinned by `tests/test_isolation.py`) now also protects PII directly.
+- Adds a service to the compose stack and to CI; startup and CI wall-clock grow.
+- Deferred (hold WIP=1): alerting/dashboards → Phase 5; garak/PyRIT red-team →
+  Phase 4; per-room guardrail config → backlog. See `docs/roadmap.md` Phase 3.
+
 ## ADR-004 — Room-based tenancy enforced by RLS via a non-owner role (2026-07-16)
 
 **Context:** Phase 2 is the security core of B: isolate data between tenants. The

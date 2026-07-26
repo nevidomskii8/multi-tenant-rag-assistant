@@ -1,0 +1,73 @@
+# llm-guard-api sidecar config (Phase 3). Mounted read-only at
+# /home/user/app/config/scanners.yml. Only the scanners Phase 3 needs are enabled
+# — the upstream default set (~20 scanners, many model-backed) wants ~16GB RAM;
+# this trimmed set keeps the sidecar light enough for the dev stack and CI.
+#
+# Threat mapping:
+#   input  Anonymize       -> OWASP LLM02, redact PII before it reaches the model
+#   input  PromptInjection -> OWASP LLM01, catch jailbreak/injection attempts
+#   output Sensitive       -> OWASP LLM02, catch PII the model tried to emit
+#   output BanSubstrings   -> OWASP LLM07, trip on the system-prompt canary
+#
+# The app calls /analyze/prompt and /analyze/output and treats is_valid=false as a
+# block (fail-closed — see app/guardrails.py, wired in Phase 3 step 4).
+
+app:
+  name: ${APP_NAME:LLM Guard API}
+  log_level: ${LOG_LEVEL:INFO}
+  log_json: ${LOG_JSON:true}
+  scan_fail_fast: ${SCAN_FAIL_FAST:false}  # false -> we get every scanner's verdict for the audit_log
+  scan_prompt_timeout: ${SCAN_PROMPT_TIMEOUT:30}
+  scan_output_timeout: ${SCAN_OUTPUT_TIMEOUT:30}
+  lazy_load: ${LAZY_LOAD:true}
+
+rate_limit:
+  enabled: ${RATE_LIMIT_ENABLED:false}
+  limit: ${RATE_LIMIT_LIMIT:100/minute}
+
+# Bearer token shared with the app (GUARDRAILS_AUTH_TOKEN). Never blank in a real env.
+auth:
+  type: http_bearer
+  token: ${AUTH_TOKEN:}
+
+tracing:
+  exporter: ${TRACING_EXPORTER:console}
+  endpoint: ${TRACING_OTEL_ENDPOINT:}
+
+metrics:
+  exporter: ${METRICS_TYPE:prometheus}
+  endpoint: ${METRICS_ENDPOINT:}
+
+input_scanners:
+  # Presidio/spaCy PII detection. sanitized_prompt comes back with PII replaced by
+  # [REDACTED_<ENTITY>] placeholders. Note: default recognizers are English-first;
+  # ru/uk coverage is partial — acceptable for the synthetic dataset (see ADR-005).
+  - type: Anonymize
+    params:
+      use_faker: false
+      threshold: 0.75
+  # DeBERTa injection classifier. truncate_head_tail scans both ends of a long
+  # prompt (payloads hide at the tail); is_valid=false above the threshold.
+  - type: PromptInjection
+    params:
+      threshold: 0.92
+      match_type: truncate_head_tail
+      model_max_length: 256
+
+output_scanners:
+  # PII in the model's answer. redact=true masks it in sanitized_output so a
+  # leak is neutralised even when the block still fires.
+  - type: Sensitive
+    params:
+      redact: true
+      threshold: 0.75
+  # System-prompt-leak tripwire (LLM07). The SYSTEM prompt embeds this canary and
+  # instructs the model never to reveal it; if it surfaces in the output the model
+  # disclosed its instructions. Value is a tripwire, not a credential — public is fine.
+  - type: BanSubstrings
+    params:
+      substrings: ["CANARY-LLM07-do-not-reveal-4f2a9c"]
+      match_type: str
+      case_sensitive: false
+      redact: false
+      contains_all: false

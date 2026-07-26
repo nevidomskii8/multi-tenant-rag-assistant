@@ -1,0 +1,23 @@
+[
+  {
+    "subject": "Cannot log in after password reset",
+    "body": "I reset my password yesterday but the app still rejects the new one on every attempt. I've cleared my cache and tried two browsers. Please help — I'm locked out of my account.",
+    "status": "open",
+    "customer_name": "Alice Johnson",
+    "customer_email": "alice.johnson@example.com"
+  },
+  {
+    "subject": "Refund not received",
+    "body": "I was charged twice for the annual plan on the 3rd and only one refund has come through. The missing amount is $99.00. Can you check the second transaction?",
+    "status": "pending",
+    "customer_name": "Bob Martinez",
+    "customer_email": "bob.martinez@example.com"
+  },
+  {
+    "subject": "Feature request: dark mode",
+    "body": "Loving the product otherwise. Any chance of a dark theme? My team works late and the bright UI is hard on the eyes.",
+    "status": "closed",
+    "customer_name": "Carol Nguyen",
+    "customer_email": "carol.nguyen@example.com"
+  }
+]

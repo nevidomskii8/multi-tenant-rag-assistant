@@ -14,6 +14,9 @@ docs/infra.local.md
 .DS_Store
 .idea/
 
+# --- Local tooling output (per-developer, not project source) ---
+graphify-out/
+
 # --- Python (Phase 0 stack) ---
 __pycache__/
 *.py[cod]

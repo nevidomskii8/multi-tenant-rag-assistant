@@ -16,6 +16,24 @@ services:
       timeout: 3s
       retries: 5
 
+  # llm-guard sidecar (Phase 3). Heavy model set (Presidio/spaCy + DeBERTa) runs
+  # here, not in the app image, so the two failure domains stay decoupled (ADR-005).
+  # Pinned tag; CPU variant. Not published on the host — only the app reaches it.
+  llm-guard-api:
+    image: laiyer/llm-guard-api:0.3.16
+    environment:
+      AUTH_TOKEN: ${GUARDRAILS_AUTH_TOKEN:-dev-guardrails-token}
+      LOG_LEVEL: ${GUARDRAILS_LOG_LEVEL:-INFO}
+    volumes:
+      - ./guardrails/scanners.yml:/home/user/app/config/scanners.yml:ro
+    healthcheck:
+      # Image ships python (it's a python app) but not necessarily curl.
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/readyz').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s  # first boot downloads/loads the scanner models
+
   app:
     build: .
     environment:
@@ -29,11 +47,17 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-haiku-4-5}
+      # Guardrail sidecar. Calls are fail-closed, so the app only serves once the
+      # sidecar is healthy (depends_on below).
+      GUARDRAILS_URL: ${GUARDRAILS_URL:-http://llm-guard-api:8000}
+      GUARDRAILS_AUTH_TOKEN: ${GUARDRAILS_AUTH_TOKEN:-dev-guardrails-token}
     volumes:
       - ./app:/app/app
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       db:
+        condition: service_healthy
+      llm-guard-api:
         condition: service_healthy
 
   nginx:

@@ -3,6 +3,81 @@
 Session-by-session notes. Newest first. See `docs/roadmap.md` for the full plan
 and `CLAUDE.md` for current status.
 
+## 2026-07-23 — Phase 3: live verification on the dev stack + findings
+
+Phase 3 code exists in the working tree (uncommitted on `main`); this session
+brought the full stack up (`docker compose up` incl. the `llm-guard-api` sidecar)
+and exercised the guardrail path end-to-end against real scanner models — the
+layer the mocked `tests/test_guardrails.py` can't cover.
+
+**Verified live (room 3, seeded synthetic PII: 3 tickets/orders/profiles → 9 chunks)**
+- **Sidecar scans for real:** `input_scan` audited as `allow` with `Anonymize` +
+  `PromptInjection` both running (DeBERTa + Presidio loaded).
+- **LLM02 output guard:** a "what is the customer email…" question → `Sensitive`
+  scored 1.0 → block → fixed refusal, `sources` emptied. PII did **not** leak.
+- **Fail-closed:** with `llm-guard-api` stopped, `/chat` returns 400 and logs
+  `guardrail /analyze/prompt unavailable, failing closed: ConnectError` — a down
+  guard denies, never falls back to raw model text.
+- **Audit trail:** rows are room-scoped and `detail` holds only scanner
+  names/scores + reason — no raw PII.
+
+**Findings to fix before closing Phase 3**
+1. **`data/` isn't mounted into the `app` container** (compose mounts only
+   `./app`; the image COPYs only `app/`,`alembic.ini`,`migrations/`). So the
+   operator seed `python -m app.pii` — and KB ingest — can't run in-container as
+   their docstrings claim (`FileNotFoundError: data/pii/tickets.json`). Worked
+   around with `docker compose cp ./data app:/app/data`; real fix is adding
+   `- ./data:/app/data` to the app service volumes.
+2. **refuse-vs-redact decision is implicit.** On a `Sensitive` block,
+   `rag.answer` discards the sidecar's `sanitized_output` and returns a flat
+   refusal, even though `guardrails/scanners.yml` sets `redact: true`. So the
+   redacted answer is never used and the assistant refuses *any* answer that
+   contains PII (strong LLM02, low utility for a support agent). Pick one
+   behaviour deliberately and record it in ADR-005; consider returning the
+   redacted text on a `Sensitive` block and reserving the flat refusal for the
+   LLM07 canary.
+3. **Stale `.env` / volume drift.** `.env` predates Phase 2/3 — missing
+   `APP_RT_PASSWORD`, `RUNTIME_DATABASE_URL`, `JWT_SECRET`, `GUARDRAILS_*`; the
+   stack runs on compose defaults. The persisted `pgdata` volume also carried an
+   older `app`/`app_rt` password than `.env`, so migration/login failed until the
+   role passwords were realigned (`ALTER USER … PASSWORD`). Regenerate `.env` from
+   `.env.example`; `JWT_SECRET` should be ≥32 bytes (`openssl rand -hex 32`) — the
+   app logged `InsecureKeyLengthWarning` on the 27-byte default.
+
+**Also still open (process):** Phase 3 code is uncommitted on `main` and the docs
+below still label the phase PLANNED — move to a `feat/phase3-guardrails` branch +
+PR and flip status to DONE once the three findings are addressed.
+
+## 2026-07-21 — Phase 3: guardrails & hardening (PLANNED)
+
+Plan agreed; not yet built. OWASP focus: **LLM02** (PII disclosure), **LLM07**
+(system-prompt leakage); reinforces **LLM01**. Architecture recorded in **ADR-005**
+(llm-guard sidecar · Postgres `audit_log` under RLS · PII embedded into RAG).
+
+**Workstreams / build order**
+1. **PII data model (`migrations/0004`)** — room-scoped `tickets`, `orders`,
+   `customer_profiles` + an `audit_log` table, all under the Phase 2 RLS + `app_rt`
+   pattern; synthetic PII seed. *(Independent of #2 — can run in parallel.)*
+2. **Guardrail sidecar** — `llm-guard-api` service in `docker-compose.yml` (pinned,
+   healthchecked); URL wired into `app/config.py`; input scanners (prompt-injection,
+   PII anonymize, token/topic caps) + output scanners (sensitive/PII, system-prompt-
+   leak guard).
+3. **Ingest PII into RAG** — render records → chunk → e5 `passage:` embed →
+   `chunks` with `room_id`; retrieval unchanged (RLS already scopes it).
+4. **Wire guardrails** — `app/guardrails.py` (`scan_input`/`scan_output`, fail-closed);
+   `scan_input` in `/chat` before retrieval, `scan_output` in `rag.answer` after the
+   Claude call; blocked → structured refusal, never raw model text. Harden `SYSTEM`
+   for LLM07 (non-disclosure instruction + canary the output guard bans).
+5. **Audit + tests** — every guardrail decision writes an `audit_log` row via `app_rt`;
+   `tests/test_guardrails.py` asserts PII redaction, jailbreak block, prompt-leak
+   catch, and a matching audit row each; CI eval gate stays green through the guards.
+
+**DoD:** guardrails catch injected PII and jailbreaks; the event is logged (audit
+table) — alerting itself deferred to Phase 5.
+
+**Deferred (WIP=1):** alerting/dashboards → Phase 5; garak/PyRIT red-team → Phase 4;
+per-room guardrail config → backlog.
+
 ## 2026-07-16 — Phase 2: rooms, membership & RLS isolation (DONE)
 
 **Done**
