@@ -31,9 +31,28 @@ meaningfully exercised. Three sub-decisions follow.
   over a structured-lookup-only endpoint for realism; a structured room-scoped query
   path is left to the Phase C agent-tool work.
 
+**Output PII policy — scope-aware, not refuse-or-redact (added 2026-07-29, finding #2).**
+The output `Sensitive` scanner initially blocked *any* answer containing PII
+(discarding the sidecar's redacted text and returning a flat refusal). That
+over-refuses: retrieval already runs under RLS, so PII in an answer can only come
+from a room the caller belongs to — it is the data this assistant exists to
+surface, not a leak. So output PII is now **advisory**: `rag.answer` returns the
+answer and records the finding as audit verdict **`flag`** (distinct from `allow`
+/ `block`; migration `0005` widens `ck_audit_verdict`). A **hard block** (fixed
+refusal, sources dropped) is reserved for a system-prompt-canary leak (LLM07,
+`BanSubstrings`) or a fail-closed infra error — unsafe regardless of who asks. The
+real cross-room disclosure threat stays caught by RLS at retrieval, before the
+model sees other rooms' data. Rejected: *refuse-all* (cripples the agent on its
+own data) and *redact-all* (`[REDACTED_EMAIL]` is equally useless for a support
+task, and `redact:true` is now off in `scanners.yml`). Trade-off: the LLM02 story
+shifts from a dramatic output block to "RLS scopes retrieval + input-injection
+scan + every PII emission is attributed in `audit_log`."
+
 **Consequences:**
 - Guardrail failures deny the request (fail-closed), so a down sidecar degrades
   availability, not safety — acceptable for the security posture.
+- Output PII is surfaced, not hidden; the audit trail (`verdict='flag'`) is the
+  LLM02 evidence artifact. Canary/LLM07 leakage is still a hard refusal.
 - Real PII lives in the vector store, so cross-room retrieval isolation (LLM08,
   already pinned by `tests/test_isolation.py`) now also protects PII directly.
 - Adds a service to the compose stack and to CI; startup and CI wall-clock grow.

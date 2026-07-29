@@ -27,9 +27,16 @@ def record_scan(
     user_id: int,
     event_type: str,
     result: ScanResult,
+    verdict: str | None = None,
 ) -> None:
     """Append one guardrail decision. `result.scanners` is stored verbatim (scores
-    only — no content), so the row is safe to keep and to expose to room members."""
+    only — no content), so the row is safe to keep and to expose to room members.
+
+    `verdict` defaults to allow/block from `result.allowed`. The caller passes it
+    explicitly when the applied policy diverges from the raw scan — e.g. the
+    scope-aware output path records "flag" for PII it detected but chose to allow
+    (ADR-005)."""
+    verdict = verdict or ("allow" if result.allowed else "block")
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO audit_log (room_id, user_id, event_type, verdict, detail) "
@@ -38,7 +45,7 @@ def record_scan(
                 room_id,
                 user_id,
                 event_type,
-                "allow" if result.allowed else "block",
+                verdict,
                 Jsonb({"scanners": result.scanners, "reason": result.reason}),
             ),
         )

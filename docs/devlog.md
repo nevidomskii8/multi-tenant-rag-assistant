@@ -28,14 +28,14 @@ layer the mocked `tests/test_guardrails.py` can't cover.
    their docstrings claim (`FileNotFoundError: data/pii/tickets.json`). Worked
    around with `docker compose cp ./data app:/app/data`; real fix is adding
    `- ./data:/app/data` to the app service volumes.
-2. **refuse-vs-redact decision is implicit.** On a `Sensitive` block,
-   `rag.answer` discards the sidecar's `sanitized_output` and returns a flat
-   refusal, even though `guardrails/scanners.yml` sets `redact: true`. So the
-   redacted answer is never used and the assistant refuses *any* answer that
-   contains PII (strong LLM02, low utility for a support agent). Pick one
-   behaviour deliberately and record it in ADR-005; consider returning the
-   redacted text on a `Sensitive` block and reserving the flat refusal for the
-   LLM07 canary.
+2. ~~**refuse-vs-redact decision is implicit.**~~ **RESOLVED 2026-07-29.** Chose a
+   third option — **scope-aware**: output PII is legitimate room data (retrieval
+   ran under RLS), so it is advisory, not blocked. `rag.answer` returns the answer
+   and audits it as verdict `flag`; a hard refusal is reserved for the LLM07 canary
+   (`BanSubstrings`) or a fail-closed error. `scanners.yml` `Sensitive` → detection
+   only (`redact:false`); migration `0005` admits the `flag` verdict; regression
+   test `test_answer_flags_pii_output_but_returns_it`. Rationale in ADR-005.
+   Full suite 25/25 green on live Postgres.
 3. **Stale `.env` / volume drift.** `.env` predates Phase 2/3 — missing
    `APP_RT_PASSWORD`, `RUNTIME_DATABASE_URL`, `JWT_SECRET`, `GUARDRAILS_*`; the
    stack runs on compose defaults. The persisted `pgdata` volume also carried an

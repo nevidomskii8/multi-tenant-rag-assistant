@@ -230,16 +230,37 @@ def _stub_answer_deps(monkeypatch, *, output_scan: ScanResult, model_text="RAW M
     monkeypatch.setattr(rag, "scan_output", lambda prompt, output: output_scan)
 
 
-def test_answer_allows_and_audits_output(admin, monkeypatch):
+def test_answer_allows_and_audits_clean_output(admin, monkeypatch):
     alice = make_user(admin, "alice@a")
     room = make_room(admin, "a", alice)
+    # No scanner tripped: the model's own text is returned as-is, audited "allow".
     _stub_answer_deps(
-        monkeypatch, output_scan=ScanResult(True, "SAFE ANSWER", {"Sensitive": 0.0}, None)
+        monkeypatch,
+        output_scan=ScanResult(True, "", {"Sensitive": 0.0, "BanSubstrings": 0.0}, None),
+        model_text="The office opens at 9am.",
     )
     out = rag.answer("hi", room_id=room, user_id=alice)
-    assert out["answer"] == "SAFE ANSWER" and out["sources"]
+    assert out["answer"] == "The office opens at 9am." and out["sources"]
     rows = audit_rows(admin, room, "output_scan")
     assert len(rows) == 1 and rows[0][0] == "allow"
+
+
+def test_answer_flags_pii_output_but_returns_it(admin, monkeypatch):
+    alice = make_user(admin, "alice@c")
+    room = make_room(admin, "c", alice)
+    # Sensitive trips on PII (is_valid=false) but no canary. Scope-aware policy
+    # (ADR-005): the answer is the caller's own room data, so it is returned and
+    # audited as "flag" — not blocked, sources kept.
+    _stub_answer_deps(
+        monkeypatch,
+        output_scan=ScanResult(False, "", {"Sensitive": 0.95, "BanSubstrings": 0.0}, "policy"),
+        model_text="The customer's email is alice@example.com.",
+    )
+    out = rag.answer("what's the contact email?", room_id=room, user_id=alice)
+    assert out["answer"] == "The customer's email is alice@example.com."
+    assert out["sources"]  # advisory, not a hard block
+    rows = audit_rows(admin, room, "output_scan")
+    assert len(rows) == 1 and rows[0][0] == "flag"
 
 
 def test_answer_blocks_leaky_output_and_audits(admin, monkeypatch):

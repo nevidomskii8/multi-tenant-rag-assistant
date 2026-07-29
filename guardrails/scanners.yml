@@ -55,11 +55,13 @@ input_scanners:
       model_max_length: 256
 
 output_scanners:
-  # PII in the model's answer. redact=true masks it in sanitized_output so a
-  # leak is neutralised even when the block still fires.
+  # PII in the model's answer. Detection only: the app treats output PII as
+  # ADVISORY (it is legitimate room data — retrieval ran under RLS) and audits it
+  # as "flag" rather than redacting or refusing (scope-aware policy, ADR-005). So
+  # redact=false — sanitized_output is unused on this path; the score drives the audit.
   - type: Sensitive
     params:
-      redact: true
+      redact: false
       threshold: 0.75
   # System-prompt-leak tripwire (LLM07). The SYSTEM prompt embeds this canary and
   # instructs the model never to reveal it; if it surfaces in the output the model
