@@ -3,6 +3,25 @@
 Session-by-session notes. Newest first. See `docs/roadmap.md` for the full plan
 and `CLAUDE.md` for current status.
 
+## 2026-08-02 — Phase 3: findings closed, DoD met
+
+All three findings from the 2026-07-23 session are resolved; Phase 3 is code-complete
+and committed on branch `feat/phase3-guardrails` (pushed, working tree clean).
+
+- **Finding #1 (data/ not mounted)** — FIXED, commit `0499497`
+  (`- ./data:/app/data` on the app service; in-container `python -m app.pii` works).
+- **Finding #2 (refuse-vs-redact)** — RESOLVED 2026-07-29, commit `ee1c252`
+  (scope-aware `flag`; migration `0005`; suite 25/25 green). See ADR-005.
+- **Finding #3 (`.env` / password drift)** — RESOLVED. `.env` regenerated from
+  `.env.example`: `JWT_SECRET` now 64 hex chars (no more `InsecureKeyLengthWarning`),
+  `APP_RT_PASSWORD` matches the password embedded in `RUNTIME_DATABASE_URL`, and all
+  `GUARDRAILS_*` keys present. `pgdata` volume recreated so role passwords align with
+  `.env` (destroyed old synthetic seed — re-seed per room with `python -m app.pii`).
+
+**Remaining (process only):** open PR `feat/phase3-guardrails → main`; merge once CI
+is green. No open technical work — deferred items (alerting → Phase 5, red-team →
+Phase 4, per-room config → backlog) stay deferred per WIP=1.
+
 ## 2026-07-23 — Phase 3: live verification on the dev stack + findings
 
 Phase 3 code exists in the working tree (uncommitted on `main`); this session
@@ -22,33 +41,32 @@ layer the mocked `tests/test_guardrails.py` can't cover.
   names/scores + reason — no raw PII.
 
 **Findings to fix before closing Phase 3**
-1. **`data/` isn't mounted into the `app` container** (compose mounts only
-   `./app`; the image COPYs only `app/`,`alembic.ini`,`migrations/`). So the
-   operator seed `python -m app.pii` — and KB ingest — can't run in-container as
-   their docstrings claim (`FileNotFoundError: data/pii/tickets.json`). Worked
-   around with `docker compose cp ./data app:/app/data`; real fix is adding
-   `- ./data:/app/data` to the app service volumes.
-2. **refuse-vs-redact decision is implicit.** On a `Sensitive` block,
-   `rag.answer` discards the sidecar's `sanitized_output` and returns a flat
-   refusal, even though `guardrails/scanners.yml` sets `redact: true`. So the
-   redacted answer is never used and the assistant refuses *any* answer that
-   contains PII (strong LLM02, low utility for a support agent). Pick one
-   behaviour deliberately and record it in ADR-005; consider returning the
-   redacted text on a `Sensitive` block and reserving the flat refusal for the
-   LLM07 canary.
-3. **Stale `.env` / volume drift.** `.env` predates Phase 2/3 — missing
-   `APP_RT_PASSWORD`, `RUNTIME_DATABASE_URL`, `JWT_SECRET`, `GUARDRAILS_*`; the
-   stack runs on compose defaults. The persisted `pgdata` volume also carried an
-   older `app`/`app_rt` password than `.env`, so migration/login failed until the
-   role passwords were realigned (`ALTER USER … PASSWORD`). Regenerate `.env` from
-   `.env.example`; `JWT_SECRET` should be ≥32 bytes (`openssl rand -hex 32`) — the
-   app logged `InsecureKeyLengthWarning` on the 27-byte default.
+1. ~~**`data/` isn't mounted into the `app` container**~~ **RESOLVED 2026-07-29,
+   commit `0499497`.** (compose mounted only `./app`; the image COPYs only
+   `app/`,`alembic.ini`,`migrations/`, so the operator seed `python -m app.pii`
+   and KB ingest hit `FileNotFoundError: data/pii/tickets.json` in-container.)
+   Fix: `- ./data:/app/data` added to the app service volumes.
+2. ~~**refuse-vs-redact decision is implicit.**~~ **RESOLVED 2026-07-29.** Chose a
+   third option — **scope-aware**: output PII is legitimate room data (retrieval
+   ran under RLS), so it is advisory, not blocked. `rag.answer` returns the answer
+   and audits it as verdict `flag`; a hard refusal is reserved for the LLM07 canary
+   (`BanSubstrings`) or a fail-closed error. `scanners.yml` `Sensitive` → detection
+   only (`redact:false`); migration `0005` admits the `flag` verdict; regression
+   test `test_answer_flags_pii_output_but_returns_it`. Rationale in ADR-005.
+   Full suite 25/25 green on live Postgres.
+3. ~~**Stale `.env` / volume drift.**~~ **RESOLVED 2026-08-02.** (`.env` predated
+   Phase 2/3 — missing `APP_RT_PASSWORD`, `RUNTIME_DATABASE_URL`, `JWT_SECRET`,
+   `GUARDRAILS_*`; the persisted `pgdata` volume also carried older passwords than
+   `.env`, so migration/login failed until roles were realigned.) Fix: `.env`
+   regenerated from `.env.example` — `JWT_SECRET` now 64 hex chars (no more
+   `InsecureKeyLengthWarning`), `APP_RT_PASSWORD` matches the DSN password, all
+   `GUARDRAILS_*` present; `pgdata` recreated so role passwords align.
 
-**Also still open (process):** Phase 3 code is uncommitted on `main` and the docs
-below still label the phase PLANNED — move to a `feat/phase3-guardrails` branch +
-PR and flip status to DONE once the three findings are addressed.
+**Process:** ✅ Phase 3 code committed on branch `feat/phase3-guardrails` (pushed).
+Remaining — open the PR to `main` and merge once CI is green. See the 2026-08-02
+entry above.
 
-## 2026-07-21 — Phase 3: guardrails & hardening (PLANNED)
+## 2026-07-21 — Phase 3: guardrails & hardening (DONE — see 2026-08-02)
 
 Plan agreed; not yet built. OWASP focus: **LLM02** (PII disclosure), **LLM07**
 (system-prompt leakage); reinforces **LLM01**. Architecture recorded in **ADR-005**

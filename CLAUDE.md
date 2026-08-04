@@ -120,11 +120,25 @@ project. Two goals drive every decision: practice **DevOps** and work through
   - *DoD met:* a non-member can't read OR write a room's data — proven by
     `tests/test_isolation.py` at the DB layer and the API layer; eval gate runs
     through RLS and stays green in CI.
-- **Next up — Phase 3 (PLANNED, not started):** guardrails (llm-guard on
-  input/output: PII redaction, injection detection), private PII records
-  (tickets/orders/profiles) room-scoped under RLS, audit logs (LLM02/LLM07).
-  Architecture locked in **ADR-005** (llm-guard **sidecar** · Postgres `audit_log`
-  under RLS · PII **embedded into RAG**); build order + DoD in `docs/devlog.md`
-  (2026-07-21 entry). See also `docs/roadmap.md` Phase 3.
+- **Phase 3 — DONE (guardrails, PII-in-RAG, audit log).** The safety layer of B
+  (OWASP LLM02/LLM07, reinforces LLM01), architecture per **ADR-005**:
+  - **Guardrail sidecar:** `llm-guard-api` service (pinned, healthchecked); app
+    calls it over HTTP via `app/guardrails.py` (`scan_input`/`scan_output`),
+    **fail-closed** — a down guard denies the request, never falls back to raw text.
+  - **PII in RAG:** room-scoped `tickets`/`orders`/`customer_profiles` (synthetic)
+    rendered → e5-embedded → `chunks` with `room_id`, so `/chat` surfaces real PII
+    and the guards are exercised end-to-end (`app/pii.py`, `migrations/0004`).
+  - **Audit log:** every guardrail decision writes an `audit_log` row under RLS via
+    `app_rt` (`app/audit.py`); `detail` holds scanner names/scores only, never raw PII.
+  - **Output PII policy — scope-aware (ADR-005, finding #2):** output PII is the
+    caller's own room data (retrieval ran under RLS), so it is advisory — the answer
+    is returned and audited as verdict `flag`. A **hard refusal** (sources dropped) is
+    reserved for a system-prompt-canary leak (LLM07, `BanSubstrings`) or a fail-closed
+    error. Migration `0005` admits the `flag` verdict.
+  - *DoD met:* guardrails catch injected PII/jailbreaks and every decision is audited;
+    `tests/test_guardrails.py` pins it (mocked) + live verification on the dev stack;
+    suite 25/25 green. **Open item:** PR `feat/phase3-guardrails → main` (code pushed).
+- **Next up — Phase 4 (red-team):** garak/PyRIT/Promptfoo/DeepTeam from Kali against
+  the app API. See `docs/roadmap.md` Phase 4.
 - Keep this section current — it is the fastest way for a new session to know
   where we are.
