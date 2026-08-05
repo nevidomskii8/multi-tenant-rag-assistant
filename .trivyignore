@@ -1,0 +1,11 @@
+# trivy allowlist — accepted / triaged CVEs (OWASP LLM03).
+#
+# A build fails on any un-listed HIGH/CRITICAL. To accept one, add its ID below
+# with a one-line justification and, ideally, a review date. An accepted CVE that
+# later gets an upstream fix is picked up by `ignore-unfixed` and re-fails — that
+# is the regression mechanism (a new/real finding always breaks the build).
+#
+# Format: one CVE ID per line, e.g.
+#   CVE-2024-XXXXX  # <why it's acceptable / not exploitable here> — reviewed 2026-08-05
+#
+# (empty — no accepted findings yet)

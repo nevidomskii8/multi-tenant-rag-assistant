@@ -1,0 +1,14 @@
+# semgrep allowlist — paths excluded from SAST.
+#
+# NOTE: a custom .semgrepignore REPLACES semgrep's built-in defaults, so the
+# common noise dirs below are listed explicitly. To silence a single line
+# instead of a whole path, use an inline `# nosemgrep: <rule-id>` comment WITH a
+# justification next to the code — prefer that over adding paths here.
+
+.git/
+.github/
+__pycache__/
+.venv/
+venv/
+tests/
+graphify-out/
