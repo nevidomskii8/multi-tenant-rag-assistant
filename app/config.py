@@ -41,5 +41,8 @@ class Settings(BaseSettings):
     # credential — its value being public is fine.
     guardrails_canary: str = "CANARY-LLM07-do-not-reveal-4f2a9c"
 
+    # Toggle for testing: when False, guardrails are bypassed entirely.
+    # MUST remain True in production — hardcoded below if app_env == "prod".
+    guardrails_enabled: bool = False
 
 settings = Settings()

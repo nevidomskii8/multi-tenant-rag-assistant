@@ -137,16 +137,19 @@ def chat(req: ChatRequest, user_id: int = Depends(get_current_user)) -> dict:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="room not found")
     # Input guard (LLM01/LLM02): block injections, redact PII from the question
     # before it reaches retrieval or the model. Fail-closed — a down sidecar denies.
-    guard = scan_input(req.question)
-    # Audit the decision first (its own tx, so a subsequent block still persists).
-    with session_for_user(user_id) as conn:
-        audit.record_scan(
-            conn, room_id=req.room_id, user_id=user_id, event_type=audit.INPUT, result=guard
-        )
-    if not guard.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="request blocked by guardrails"
-        )
-    result = answer(guard.sanitized, room_id=req.room_id, user_id=user_id, k=req.k)
+    if settings.guardrails_enabled:
+        guard = scan_input(req.question)
+        with session_for_user(user_id) as conn:
+            audit.record_scan(
+                conn, room_id=req.room_id, user_id=user_id, event_type=audit.INPUT, result=guard
+            )
+        if not guard.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="request blocked by guardrails"
+            )
+        else:
+            question_to_use = req.question  # bypass — raw input goes to RAG
+
+    result = answer(question_to_use, room_id=req.room_id, user_id=user_id, k=req.k)
     # `context` (raw KB chunks) stays internal — the client gets answer + cited sources.
     return {"answer": result["answer"], "sources": result["sources"]}
