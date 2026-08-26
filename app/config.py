@@ -45,4 +45,5 @@ class Settings(BaseSettings):
     # MUST remain True in production — hardcoded below if app_env == "prod".
     guardrails_enabled: bool = False
 
+
 settings = Settings()
