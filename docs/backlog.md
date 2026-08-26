@@ -37,6 +37,18 @@ phase reaches it, or promote to a GitHub issue labeled `backlog`.
 - **File upload (multipart)** for `POST /rooms/{id}/documents`: today it accepts
   JSON `{title, content}`; add real file upload (pdf/md/txt parsing).
 
+## From Phase 4 (DevSecOps / red-team)
+
+- **Custom semgrep rule — RLS bypass guard** (Slice A follow-up): the community
+  rulesets (`p/python`, `p/security-audit`, `p/secrets`) don't know this project's
+  isolation invariant. Write a targeted rule that flags DB access outside the
+  scoped path — raw SQL built with f-strings/`%`/`.format()`, and connections
+  obtained NOT via `session_for_user()` (e.g. a stray `get_conn()`/admin session
+  on the request path). This reinforces the RLS guarantee already proven by
+  `tests/test_isolation.py` at the SAST layer. Prompt-injection / SSRF-via-tool
+  rules are deliberately excluded — that surface is Phase 7 (agent layer) and
+  doesn't exist yet.
+
 ## Eval hardening (deferred, low priority)
 
 - **Judge-based refusal check**: `eval/run.py` detects refusals with a keyword

@@ -1,0 +1,129 @@
+name: Security
+
+# DevSecOps scanners (Phase 4, OWASP LLM03 supply chain + SAST hygiene).
+# Deliberately separate from ci.yml: these gate on security findings, not on
+# lint/test/eval, and run on their own schedule. checkov/tfsec (Terraform IaC
+# misconfig) are absent until Terraform exists (Phase 6.5); Docker misconfig is
+# covered NOW by the trivy `config` scan below. gitleaks lives in ci.yml.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Daily re-scan: catches NEW CVEs disclosed against an unchanged image.
+    - cron: "17 6 * * *"
+
+# Least-privilege: read the repo, and write code-scanning results (SARIF).
+permissions:
+  contents: read
+  security-events: write
+
+# Cancel superseded runs on the same ref instead of burning runners.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Track 1 — supply chain + Docker misconfig. One trivy engine, three outputs:
+  # an SBOM inventory, a CVE scan, and a Dockerfile/compose misconfig scan.
+  trivy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # --pull: never trust a cached local base layer (matters for local/self-
+      # hosted runs; ephemeral GitHub runners pull fresh anyway).
+      - name: Build image (the real scan target — OS layer + Python deps)
+        run: docker build --pull -t multi-tenant-llm:ci .
+
+      - name: Cache trivy vulnerability DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db
+
+      - name: Generate SBOM (CycloneDX) — the "what's inside" inventory
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: multi-tenant-llm:ci
+          format: cyclonedx
+          output: sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+      # SARIF → GitHub Security tab (open/fixed tracking). This step does NOT
+      # gate the build — the exit-code step below is the actual gate.
+      - name: Vulnerability + secret scan (SARIF, for the Security tab)
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: multi-tenant-llm:ci
+          scanners: vuln,secret
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Upload trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Vulnerability + secret scan — gate on HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: multi-tenant-llm:ci
+          scanners: vuln,secret
+          format: table
+          severity: HIGH,CRITICAL
+          # Unfixable OS CVEs are noise we cannot act on; a fixed version landing
+          # upstream flips them back on and re-fails the build.
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      # Docker misconfig (root user, missing HEALTHCHECK, unsafe COPY, …) — the
+      # piece of "config scanning" available today; Terraform waits for 6.5.
+      - name: Dockerfile / compose misconfig scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+  # Track 2 — first-party code (SAST). Orthogonal to the SBOM/trivy axis: this
+  # inspects OUR code for unsafe patterns, not dependency versions. Scans the
+  # repo root and relies on .semgrepignore so new dirs are covered automatically.
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install semgrep
+
+      - name: Semgrep SAST — gate on findings
+        env:
+          SEMGREP_SEND_METRICS: "off"
+        run: >-
+          semgrep scan
+          --config p/python
+          --config p/security-audit
+          --config p/secrets
+          --error
+          .
