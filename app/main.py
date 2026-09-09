@@ -174,6 +174,8 @@ def chat(request: Request, req: ChatRequest, user_id: int = Depends(get_current_
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="request blocked by guardrails"
             )
+        # Use the sanitized version (PII masked) for retrieval and LLM
+        question_to_use = guard.sanitized
 
     result = answer(question_to_use, room_id=req.room_id, user_id=user_id, k=req.k)
 

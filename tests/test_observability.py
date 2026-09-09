@@ -146,9 +146,9 @@ def test_llm_metrics_defined():
         estimate_cost,
     )
 
-    # Check labels
+    # Check labels — room_id removed to prevent tenant structure leakage
     assert "model" in llm_requests_total._labelnames
-    assert "room_id" in llm_requests_total._labelnames
+    assert "room_id" not in llm_requests_total._labelnames  # security: no tenant labels
     assert "direction" in llm_tokens_total._labelnames
 
     # Test cost estimation

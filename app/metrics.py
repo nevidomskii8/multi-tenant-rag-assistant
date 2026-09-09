@@ -24,7 +24,7 @@ http_request_duration_seconds = Histogram(
 llm_requests_total = Counter(
     "llm_requests_total",
     "Total LLM API requests",
-    ["model", "room_id"],
+    ["model"],
 )
 
 llm_tokens_total = Counter(
@@ -55,20 +55,20 @@ llm_cost_dollars_total = Counter(
 retrieval_requests_total = Counter(
     "retrieval_requests_total",
     "Total retrieval requests",
-    ["room_id"],
+    [],
 )
 
 retrieval_chunks_returned = Histogram(
     "retrieval_chunks_returned",
     "Number of chunks returned per retrieval",
-    ["room_id"],
+    [],
     buckets=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 )
 
 retrieval_empty_total = Counter(
     "retrieval_empty_total",
     "Retrieval requests returning zero chunks",
-    ["room_id"],
+    [],
 )
 
 retrieval_duration_seconds = Histogram(
@@ -96,7 +96,7 @@ guardrail_duration_seconds = Histogram(
 rate_limit_hits_total = Counter(
     "rate_limit_hits_total",
     "Rate limit hits",
-    ["user_id", "endpoint"],
+    ["endpoint"],
 )
 
 

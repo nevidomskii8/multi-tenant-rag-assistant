@@ -69,12 +69,11 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
 
     Records metrics and returns a structured JSON response with Retry-After header.
     """
-    # Extract user identifier for metrics
-    key = _get_user_id_or_ip(request)
+    # Extract endpoint for metrics (user_id excluded to prevent tenant leakage)
     endpoint = request.url.path
 
     # Record metric
-    rate_limit_hits_total.labels(user_id=key, endpoint=endpoint).inc()
+    rate_limit_hits_total.labels(endpoint=endpoint).inc()
 
     # Parse retry-after from the exception
     retry_after = 60  # default

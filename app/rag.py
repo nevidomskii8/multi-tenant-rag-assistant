@@ -75,7 +75,6 @@ def _format_context(hits: list[dict]) -> str:
 def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
     # Retrieve inside an RLS-scoped transaction: the caller only ever sees chunks
     # from rooms they belong to. The Claude call runs after, outside the DB tx.
-    room_label = str(room_id)
 
     # --- Retrieval with metrics ---
     retrieval_start = time.perf_counter()
@@ -83,11 +82,11 @@ def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
         hits = retrieve(conn, question, k, room_id=room_id)
     retrieval_duration = time.perf_counter() - retrieval_start
 
-    retrieval_requests_total.labels(room_id=room_label).inc()
-    retrieval_chunks_returned.labels(room_id=room_label).observe(len(hits))
+    retrieval_requests_total.inc()
+    retrieval_chunks_returned.observe(len(hits))
     retrieval_duration_seconds.observe(retrieval_duration)
     if len(hits) == 0:
-        retrieval_empty_total.labels(room_id=room_label).inc()
+        retrieval_empty_total.inc()
 
     context = _format_context(hits)
     prompt = f"Reference context:\n<context>\n{context}\n</context>\n\nQuestion: {question}"
@@ -118,7 +117,7 @@ def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
         )
 
     # Record LLM metrics
-    llm_requests_total.labels(model=model, room_id=room_label).inc()
+    llm_requests_total.labels(model=model).inc()
     llm_request_duration_seconds.labels(model=model).observe(llm_duration)
     llm_tokens_total.labels(model=model, direction="input").inc(input_tokens)
     llm_tokens_total.labels(model=model, direction="output").inc(output_tokens)

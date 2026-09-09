@@ -1,3 +1,6 @@
+from typing import Self
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -55,6 +58,23 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     rate_limit_requests_per_min: int = 60
     rate_limit_tokens_per_hour: int = 100_000
+
+    @model_validator(mode="after")
+    def validate_prod_settings(self) -> Self:
+        """Fail fast if production is misconfigured with insecure defaults."""
+        if self.app_env == "prod":
+            errors = []
+            if self.jwt_secret == "dev-only-insecure-change-me":
+                errors.append("JWT_SECRET must be changed in production")
+            if not self.guardrails_enabled:
+                errors.append("GUARDRAILS_ENABLED must be True in production")
+            if not self.anthropic_api_key:
+                errors.append("ANTHROPIC_API_KEY is required in production")
+            if not self.langfuse_secret_key or not self.langfuse_public_key:
+                errors.append("LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY are required in production")
+            if errors:
+                raise ValueError(f"Production configuration errors: {'; '.join(errors)}")
+        return self
 
 
 settings = Settings()
