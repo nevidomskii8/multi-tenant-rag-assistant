@@ -45,5 +45,16 @@ class Settings(BaseSettings):
     # MUST remain True in production — hardcoded below if app_env == "prod".
     guardrails_enabled: bool = False
 
+    # Observability
+    loki_url: str = "http://loki:3100"
+    langfuse_secret_key: str = ""
+    langfuse_public_key: str = ""
+    langfuse_host: str = "http://langfuse:3000"
+
+    # Rate limiting (LLM10 — denial-of-wallet defense)
+    redis_url: str = "redis://redis:6379/0"
+    rate_limit_requests_per_min: int = 60
+    rate_limit_tokens_per_hour: int = 100_000
+
 
 settings = Settings()

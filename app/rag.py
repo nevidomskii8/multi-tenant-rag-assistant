@@ -15,6 +15,7 @@ Security posture (OWASP LLM Top 10):
 """
 
 import re
+import time
 from functools import lru_cache
 
 from anthropic import Anthropic
@@ -23,7 +24,19 @@ from app import audit
 from app.config import settings
 from app.db import session_for_user
 from app.guardrails import scan_output
+from app.metrics import (
+    estimate_cost,
+    llm_cost_dollars_total,
+    llm_request_duration_seconds,
+    llm_requests_total,
+    llm_tokens_total,
+    retrieval_chunks_returned,
+    retrieval_duration_seconds,
+    retrieval_empty_total,
+    retrieval_requests_total,
+)
 from app.retrieval import retrieve
+from app.tracing import trace_generation
 
 # Generic identity: this is now a multi-room assistant, so the system prompt is
 # not tied to any single tenant. (Per-room personalization → backlog.)
@@ -62,17 +75,56 @@ def _format_context(hits: list[dict]) -> str:
 def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
     # Retrieve inside an RLS-scoped transaction: the caller only ever sees chunks
     # from rooms they belong to. The Claude call runs after, outside the DB tx.
+    room_label = str(room_id)
+
+    # --- Retrieval with metrics ---
+    retrieval_start = time.perf_counter()
     with session_for_user(user_id) as conn:
         hits = retrieve(conn, question, k, room_id=room_id)
+    retrieval_duration = time.perf_counter() - retrieval_start
+
+    retrieval_requests_total.labels(room_id=room_label).inc()
+    retrieval_chunks_returned.labels(room_id=room_label).observe(len(hits))
+    retrieval_duration_seconds.observe(retrieval_duration)
+    if len(hits) == 0:
+        retrieval_empty_total.labels(room_id=room_label).inc()
+
     context = _format_context(hits)
     prompt = f"Reference context:\n<context>\n{context}\n</context>\n\nQuestion: {question}"
-    resp = _client().messages.create(
-        model=settings.claude_model,
-        max_tokens=1024,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = "".join(block.text for block in resp.content if block.type == "text")
+
+    # --- LLM call with metrics + Langfuse tracing ---
+    model = settings.claude_model
+    trace_metadata = {"room_id": room_id, "user_id": user_id, "k": k, "chunks": len(hits)}
+
+    with trace_generation("rag_answer", model, prompt, metadata=trace_metadata) as trace:
+        llm_start = time.perf_counter()
+        resp = _client().messages.create(
+            model=model,
+            max_tokens=1024,
+            system=SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        llm_duration = time.perf_counter() - llm_start
+
+        input_tokens = resp.usage.input_tokens
+        output_tokens = resp.usage.output_tokens
+        text = "".join(block.text for block in resp.content if block.type == "text")
+
+        # Update Langfuse trace with output and usage
+        trace.update(
+            output=text,
+            usage={"input": input_tokens, "output": output_tokens},
+            metadata={"duration_seconds": llm_duration},
+        )
+
+    # Record LLM metrics
+    llm_requests_total.labels(model=model, room_id=room_label).inc()
+    llm_request_duration_seconds.labels(model=model).observe(llm_duration)
+    llm_tokens_total.labels(model=model, direction="input").inc(input_tokens)
+    llm_tokens_total.labels(model=model, direction="output").inc(output_tokens)
+
+    cost = estimate_cost(model, input_tokens, output_tokens)
+    llm_cost_dollars_total.labels(model=model).inc(cost)
 
     # Output guard — scope-aware policy (ADR-005, finding #2). The answer's PII
     # comes from a room the caller belongs to (retrieval ran under RLS), so it is

@@ -15,12 +15,14 @@ mocked transport.
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 
 import httpx
 
 from app.config import settings
+from app.metrics import guardrail_duration_seconds, guardrail_verdicts_total
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +61,10 @@ def _client() -> httpx.Client:
 
 
 def _scan(path: str, payload: dict, sanitized_key: str) -> ScanResult:
+    # Determine stage from path for metrics
+    stage = "input" if "prompt" in path else "output"
+
+    start = time.perf_counter()
     try:
         resp = _client().post(path, json=payload)
         resp.raise_for_status()
@@ -66,13 +72,26 @@ def _scan(path: str, payload: dict, sanitized_key: str) -> ScanResult:
     except (httpx.HTTPError, ValueError) as exc:
         # FAIL-CLOSED: no clean verdict → deny. Log the failure class, not content.
         log.warning("guardrail %s unavailable, failing closed: %s", path, exc.__class__.__name__)
+        duration = time.perf_counter() - start
+        guardrail_duration_seconds.labels(stage=stage).observe(duration)
+        guardrail_verdicts_total.labels(scanner="unavailable", verdict="blocked").inc()
         return ScanResult(allowed=False, sanitized="", scanners={}, reason="unavailable")
 
+    duration = time.perf_counter() - start
+    guardrail_duration_seconds.labels(stage=stage).observe(duration)
+
     allowed = bool(data.get("is_valid", False))  # missing/false → deny
+    scanners = data.get("scanners", {})
+
+    # Record per-scanner verdicts for observability
+    verdict = "allowed" if allowed else "blocked"
+    for scanner_name in scanners:
+        guardrail_verdicts_total.labels(scanner=scanner_name, verdict=verdict).inc()
+
     return ScanResult(
         allowed=allowed,
         sanitized=data.get(sanitized_key, "") if allowed else "",
-        scanners=data.get("scanners", {}),
+        scanners=scanners,
         reason=None if allowed else "policy",
     )
 

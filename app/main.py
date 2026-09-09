@@ -8,8 +8,11 @@ so a caller cannot distinguish a forbidden room from a non-existent one
 """
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from psycopg.errors import UniqueViolation
 from pydantic import BaseModel, Field
+from starlette.requests import Request
+from starlette.responses import Response
 
 from app import audit
 from app import rooms as rooms_repo
@@ -24,9 +27,25 @@ from app.config import settings
 from app.db import session_for_user
 from app.guardrails import scan_input
 from app.ingest import ingest_text
+from app.logging_config import configure_logging, get_logger
+from app.middleware import CorrelationIdMiddleware, MetricsMiddleware
 from app.rag import answer
+from app.ratelimit import CHAT_RATE_LIMIT, limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+# Initialize structured logging (Phase 5)
+configure_logging()
+log = get_logger(__name__)
 
 app = FastAPI(title="multi-tenant-rag-assistant")
+
+# Rate limiting state (Phase 5 — LLM10 denial-of-wallet defense)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# Observability middleware (Phase 5)
+app.add_middleware(MetricsMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 
 
 class Credentials(BaseModel):
@@ -57,6 +76,12 @@ class ChatRequest(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """Prometheus metrics endpoint (Phase 5)."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # --- Auth ----------------------------------------------------------------------
@@ -131,12 +156,14 @@ def upload_document(
 
 
 @app.post("/chat")
-def chat(req: ChatRequest, user_id: int = Depends(get_current_user)) -> dict:
+@limiter.limit(CHAT_RATE_LIMIT)
+def chat(request: Request, req: ChatRequest, user_id: int = Depends(get_current_user)) -> dict:
     with session_for_user(user_id) as conn:
         if not rooms_repo.is_member(conn, req.room_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="room not found")
     # Input guard (LLM01/LLM02): block injections, redact PII from the question
     # before it reaches retrieval or the model. Fail-closed — a down sidecar denies.
+    question_to_use = req.question
     if settings.guardrails_enabled:
         guard = scan_input(req.question)
         with session_for_user(user_id) as conn:
@@ -147,9 +174,17 @@ def chat(req: ChatRequest, user_id: int = Depends(get_current_user)) -> dict:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="request blocked by guardrails"
             )
-        else:
-            question_to_use = req.question  # bypass — raw input goes to RAG
 
     result = answer(question_to_use, room_id=req.room_id, user_id=user_id, k=req.k)
+
+    log.info(
+        "chat_completed",
+        user_id=user_id,
+        room_id=req.room_id,
+        question_len=len(req.question),
+        sources_count=len(result["sources"]),
+        guardrail_verdict=result.get("guardrail", {}).get("verdict"),
+    )
+
     # `context` (raw KB chunks) stays internal — the client gets answer + cited sources.
     return {"answer": result["answer"], "sources": result["sources"]}
