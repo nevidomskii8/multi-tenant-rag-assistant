@@ -110,6 +110,23 @@ services:
       - "127.0.0.1:9090:9090"
     depends_on:
       - app
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./observability/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "127.0.0.1:9093:9093"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9093/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   loki:
     image: grafana/loki:3.0.0
@@ -172,6 +189,7 @@ services:
 volumes:
   pgdata:
   prometheus_data:
+  alertmanager_data:
   loki_data:
   langfuse_pgdata:
   grafana_data:

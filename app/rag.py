@@ -11,7 +11,8 @@ Security posture (OWASP LLM Top 10):
   audited but NOT blocked. Only a system-prompt-leak canary (LLM07) or a down
   sidecar (fail-closed) turns the answer into a fixed refusal.
 - LLM10 (unbounded consumption): response is capped via max_tokens; the API
-  layer caps question length and k.
+  layer caps question length and k; token usage is tracked per-user per-hour
+  via Redis (record_token_usage), with RPM enforced at the API layer.
 """
 
 import re
@@ -35,6 +36,7 @@ from app.metrics import (
     retrieval_empty_total,
     retrieval_requests_total,
 )
+from app.ratelimit import record_token_usage
 from app.retrieval import retrieve
 from app.tracing import trace_generation
 
@@ -124,6 +126,10 @@ def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
 
     cost = estimate_cost(model, input_tokens, output_tokens)
     llm_cost_dollars_total.labels(model=model).inc(cost)
+
+    # Token budget tracking (LLM10 — denial-of-wallet by token consumption)
+    total_tokens = input_tokens + output_tokens
+    record_token_usage(user_id, total_tokens)
 
     # Output guard — scope-aware policy (ADR-005, finding #2). The answer's PII
     # comes from a room the caller belongs to (retrieval ran under RLS), so it is

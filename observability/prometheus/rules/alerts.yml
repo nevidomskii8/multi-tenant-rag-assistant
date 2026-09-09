@@ -91,12 +91,12 @@ groups:
           summary: "Elevated guardrail blocks"
           description: "{{ $value | printf \"%.1f\" }} blocks per minute"
 
-      # Guardrail sidecar down
+      # Guardrail sidecar down (handles both down and absent /metrics)
       - alert: GuardrailSidecarDown
-        expr: up{job="llm-guard"} == 0
+        expr: up{job="llm-guard"} == 0 or absent(up{job="llm-guard"})
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "LLM Guard sidecar is down"
+          summary: "LLM Guard sidecar is down or unreachable"
           description: "Fail-closed mode active — all requests will be denied"

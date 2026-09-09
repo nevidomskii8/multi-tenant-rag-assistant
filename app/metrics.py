@@ -41,10 +41,6 @@ llm_request_duration_seconds = Histogram(
 )
 
 # Cost tracking (LLM10 denial-of-wallet defense)
-# Prices per 1M tokens (as of 2024, subject to change):
-# Haiku: $0.25 input, $1.25 output
-# Sonnet: $3 input, $15 output
-# Opus: $15 input, $75 output
 llm_cost_dollars_total = Counter(
     "llm_cost_dollars_total",
     "Estimated LLM API cost in USD",
@@ -100,10 +96,14 @@ rate_limit_hits_total = Counter(
 )
 
 
-# Claude API pricing (per 1M tokens, as of 2024)
+# Claude API pricing (per 1M tokens, as of 2024-2025).
+# Source: https://www.anthropic.com/pricing
+# Claude 3.5 Haiku: $0.80 input, $4.00 output
+# Claude 3.5/4 Sonnet: $3.00 input, $15.00 output
+# Claude 3.5/4 Opus: $15.00 input, $75.00 output
 _PRICING = {
-    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
-    "claude-3-5-haiku-latest": {"input": 1.00, "output": 5.00},
+    "claude-haiku-4-5": {"input": 0.80, "output": 4.00},
+    "claude-3-5-haiku-latest": {"input": 0.80, "output": 4.00},
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
     "claude-3-5-sonnet-latest": {"input": 3.00, "output": 15.00},
     "claude-opus-4-5": {"input": 15.00, "output": 75.00},
