@@ -3,6 +3,58 @@
 Session-by-session notes. Newest first. See `docs/roadmap.md` for the full plan
 and `CLAUDE.md` for current status.
 
+## 2026-09-09 — Phase 5: observability (IN PROGRESS)
+
+Building out metrics, rate limiting, and tracing for production readiness.
+
+**Done**
+- **Prometheus metrics (`app/metrics.py`):** HTTP request counters/histograms,
+  LLM metrics (requests, tokens, latency, cost), retrieval metrics, guardrail
+  verdicts, rate-limit hits. Cost estimation for denial-of-wallet alerting (LLM10).
+- **Rate limiting (`app/ratelimit.py`):** slowapi with Redis backend for per-user
+  RPM on `/chat`; token budget tracking per hour via Redis (LLM10). Fail-open for
+  token tracking when Redis unavailable (RPM still enforced).
+- **Tracing (`app/tracing.py`):** Langfuse integration for LLM call observability;
+  traces include model, prompt, output, token usage, latency.
+- **Alerting:** Prometheus rules (`alerts.yml`) for error rates, latency, app down,
+  LLM cost spikes, token budget warnings, rate-limit storms, guardrail blocks.
+  Alertmanager service added to docker-compose.
+- **Observability stack:** Prometheus scrape config for app + llm-guard sidecar.
+
+**Security fixes (code review)**
+- `guard.sanitized` now used (input guardrail actually applied).
+- nginx blocks `/metrics` endpoint externally (prevent structure/cost leakage).
+- Removed tenant IDs (room_id, user_id) from metric labels (cardinality + structure).
+- Production config validation via Pydantic `model_validator` (JWT_SECRET,
+  GUARDRAILS_ENABLED, ANTHROPIC_API_KEY must be set in prod).
+- Fixed `_PRICING` dict to match comment prices.
+- Fixed `GuardrailSidecarDown` alert to handle absent metrics (`absent()`).
+
+**In progress**
+- Finalizing metrics instrumentation across all endpoints.
+- Documentation updates.
+
+## 2026-09-01 — Phase 4: DevSecOps scanners + red-team prep (DONE)
+
+**Done**
+- **Security workflow (`.github/workflows/security.yml`):** trivy (container scan +
+  SBOM generation), semgrep (SAST), gitleaks (secrets). Runs on push/PR.
+- **Container hardening:** Dockerfile runs as non-root user; PEP8 spacing fixes
+  for linter compliance.
+- **Red-team documentation:** garak, PyRIT, Promptfoo, DeepTeam usage documented
+  for Kali lab runs against the app API (Phase C agent attacks).
+
+**Verified (DoD)**
+- Security scanners green in CI.
+- Container runs as non-root (verified via `docker exec whoami`).
+- No new gitleaks findings.
+
+**Notes**
+- Red-team tooling is ready but actual attack runs deferred to Phase C (agent layer),
+  where indirect prompt injection (EchoLeak-style) is the target scenario.
+- DevSecOps scanners now provide baseline security coverage: container vulns (trivy),
+  code patterns (semgrep), secrets (gitleaks).
+
 ## 2026-08-02 — Phase 3: findings closed, DoD met
 
 All three findings from the 2026-07-23 session are resolved; Phase 3 is code-complete
