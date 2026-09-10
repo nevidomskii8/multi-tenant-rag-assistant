@@ -6,12 +6,9 @@ skipped (in-memory fallback), Prometheus/Loki/Langfuse are not needed for
 unit tests.
 """
 
-import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 from app.main import app
-from app.middleware import correlation_id_var
 
 client = TestClient(app)
 
@@ -78,8 +75,9 @@ def _make_mock_request(user_id=None):
 
 def test_rate_limit_handler_returns_429():
     """Rate limit handler returns proper 429 response."""
-    from app.ratelimit import rate_limit_exceeded_handler
     import json
+
+    from app.ratelimit import rate_limit_exceeded_handler
 
     mock_request = _make_mock_request()
 
@@ -99,8 +97,9 @@ def test_rate_limit_handler_returns_429():
 
 def test_rate_limit_handler_format():
     """Rate limit response has correct JSON structure."""
-    from app.ratelimit import rate_limit_exceeded_handler
     import json
+
+    from app.ratelimit import rate_limit_exceeded_handler
 
     mock_request = _make_mock_request()
 
@@ -126,7 +125,7 @@ def test_rate_limit_handler_format():
 
 def test_http_metrics_defined():
     """HTTP metrics are properly defined with labels."""
-    from app.metrics import http_requests_total, http_request_duration_seconds
+    from app.metrics import http_request_duration_seconds, http_requests_total
 
     # Check that metrics have the expected labels
     assert "method" in http_requests_total._labelnames
@@ -140,10 +139,9 @@ def test_http_metrics_defined():
 def test_llm_metrics_defined():
     """LLM metrics are properly defined."""
     from app.metrics import (
+        estimate_cost,
         llm_requests_total,
         llm_tokens_total,
-        llm_cost_dollars_total,
-        estimate_cost,
     )
 
     # Check labels — room_id removed to prevent tenant structure leakage
@@ -172,8 +170,8 @@ def test_logging_config_runs_without_error():
 
 def test_get_logger_returns_bound_logger():
     """get_logger returns a structlog BoundLogger."""
+
     from app.logging_config import get_logger
-    import structlog
 
     log = get_logger("test_module")
     assert hasattr(log, "info")
@@ -186,7 +184,7 @@ def test_get_logger_returns_bound_logger():
 
 def test_tracing_noop_when_disabled():
     """Tracing context manager works as no-op when Langfuse is not configured."""
-    from app.tracing import trace_generation, is_enabled
+    from app.tracing import trace_generation
 
     # In test env, Langfuse should not be configured
     # The context manager should work without error
@@ -210,8 +208,8 @@ def test_tracing_is_enabled_returns_bool():
 
 def test_rate_limiter_key_extracts_user_from_jwt():
     """Rate limiter key function extracts user_id from JWT token."""
-    from app.ratelimit import _get_user_id_or_ip
     from app.auth import create_access_token
+    from app.ratelimit import _get_user_id_or_ip
 
     # Create a valid token
     token = create_access_token(123, "test@example.com")

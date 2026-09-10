@@ -1,7 +1,13 @@
 """Structured logging configuration (Phase 5 — Observability).
 
 Uses structlog for JSON-formatted logs with correlation IDs.
-Pushes logs to Loki via python-logging-loki when LOKI_URL is set.
+Logs go to stdout; Promtail/Alloy collects and ships to Loki.
+
+NOTE: We intentionally do NOT use python-logging-loki's LokiHandler here.
+That handler does synchronous HTTP POST on every log line — if Loki is slow
+or down, it blocks the request path. The idiomatic Docker/K8s pattern is:
+  app → stdout → Promtail/Alloy → Loki
+This decouples observability from request latency.
 """
 
 import logging
@@ -12,9 +18,6 @@ import structlog
 from structlog.types import Processor
 
 from app.config import settings
-
-# Loki handler — only imported when URL is configured
-_loki_handler: logging.Handler | None = None
 
 
 def _add_correlation_id(
@@ -40,7 +43,6 @@ def _add_app_context(
 
 def configure_logging() -> None:
     """Configure structlog and standard logging for the app."""
-    global _loki_handler
 
     # Shared processors for structlog
     shared_processors: list[Processor] = [
@@ -84,23 +86,6 @@ def configure_logging() -> None:
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
     root_logger.setLevel(logging.INFO)
-
-    # Add Loki handler if URL is configured (skip in tests/dev without Loki)
-    if settings.loki_url and settings.app_env != "test":
-        try:
-            import logging_loki
-
-            _loki_handler = logging_loki.LokiHandler(
-                url=f"{settings.loki_url}/loki/api/v1/push",
-                tags={"service": "multi-tenant-rag", "env": settings.app_env},
-                version="1",
-            )
-            _loki_handler.setFormatter(formatter)
-            root_logger.addHandler(_loki_handler)
-        except ImportError:
-            logging.warning("python-logging-loki not installed, skipping Loki handler")
-        except Exception as e:
-            logging.warning("Failed to configure Loki handler: %s", e)
 
     # Reduce noise from third-party libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)

@@ -21,8 +21,10 @@ dependencies = [
     # Observability
     "prometheus-client>=0.21",
     "structlog>=24.4",
-    "python-logging-loki>=0.3",
-    "langfuse>=2.51",
+    # NOTE: We do NOT use python-logging-loki. Its LokiHandler does synchronous
+    # HTTP on every log line, blocking requests if Loki is slow/down. Instead,
+    # logs go to stdout and Promtail/Alloy ships them to Loki asynchronously.
+    "langfuse>=2.51,<3",  # SDK v2 for langfuse/langfuse:2 server
     # Rate limiting (LLM10)
     "slowapi>=0.1",
     "redis>=5.2",

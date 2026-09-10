@@ -54,6 +54,9 @@ def trace_generation(
 ):
     """Context manager for tracing an LLM generation.
 
+    Fail-open: if Langfuse is unavailable or errors, tracing is skipped silently.
+    Unlike guardrails, tracing is observability — it must never block requests.
+
     Usage:
         with trace_generation("answer", "claude-haiku", prompt) as trace:
             response = call_llm(prompt)
@@ -70,29 +73,37 @@ def trace_generation(
 
     correlation_id = get_correlation_id()
 
-    # Create a trace for this request
-    trace = langfuse.trace(
-        name=name,
-        session_id=correlation_id or None,
-        metadata=metadata or {},
-    )
+    # Fail-open: any Langfuse error → no-op, request proceeds
+    try:
+        # Create a trace for this request
+        trace = langfuse.trace(
+            name=name,
+            session_id=correlation_id or None,
+            metadata=metadata or {},
+        )
 
-    # Create a generation span
-    generation = trace.generation(
-        name=f"{name}_generation",
-        model=model,
-        input=input_text,
-        metadata=metadata or {},
-    )
+        # Create a generation span
+        generation = trace.generation(
+            name=f"{name}_generation",
+            model=model,
+            input=input_text,
+            metadata=metadata or {},
+        )
+    except Exception:
+        # Langfuse SDK error (e.g., API mismatch) — degrade gracefully
+        yield _NoOpTrace()
+        return
 
     try:
         yield _LangfuseGeneration(generation, trace)
     finally:
-        # End the generation span
-        generation.end()
-        # Flush to ensure data is sent
+        # End the generation span — also fail-open
+        # NOTE: We do NOT call langfuse.flush() here. The SDK batches events
+        # internally and flushes automatically. Calling flush() on every request
+        # blocks the request path if Langfuse is slow/down. Use shutdown_tracing()
+        # on app shutdown to flush remaining events.
         try:
-            langfuse.flush()
+            generation.end()
         except Exception:
             pass
 
@@ -135,3 +146,17 @@ class _LangfuseGeneration:
     def score(self, name: str, value: float, comment: str | None = None):
         """Add a score to the trace (for evaluation)."""
         self._trace.score(name=name, value=value, comment=comment)
+
+
+def shutdown_tracing() -> None:
+    """Flush pending Langfuse events on app shutdown.
+
+    Call this from FastAPI's lifespan shutdown hook to ensure all traces
+    are sent before the process exits. Safe to call if Langfuse is disabled.
+    """
+    langfuse = _get_langfuse()
+    if langfuse is not None:
+        try:
+            langfuse.flush()
+        except Exception:
+            pass  # Best-effort on shutdown

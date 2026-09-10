@@ -36,7 +36,7 @@ from app.metrics import (
     retrieval_empty_total,
     retrieval_requests_total,
 )
-from app.ratelimit import record_token_usage
+from app.ratelimit import get_token_usage, record_token_usage
 from app.retrieval import retrieve
 from app.tracing import trace_generation
 
@@ -75,6 +75,20 @@ def _format_context(hits: list[dict]) -> str:
 
 
 def answer(question: str, *, room_id: int, user_id: int, k: int = 4) -> dict:
+    # --- Token budget pre-check (LLM10 — denial-of-wallet) ---
+    # Reject if user already exceeded their hourly budget BEFORE calling Claude.
+    # Fail-open: if Redis is down, get_token_usage returns 0, allowing the request.
+    from app.config import settings as cfg
+
+    current_usage = get_token_usage(user_id)
+    if current_usage > cfg.rate_limit_tokens_per_hour:
+        return {
+            "answer": "You have exceeded your hourly token budget. Please try again later.",
+            "sources": [],
+            "context": "",
+            "guardrail": {"stage": "budget", "verdict": "block", "reason": "token_budget_exceeded"},
+        }
+
     # Retrieve inside an RLS-scoped transaction: the caller only ever sees chunks
     # from rooms they belong to. The Claude call runs after, outside the DB tx.
 

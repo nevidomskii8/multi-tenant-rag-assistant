@@ -7,10 +7,13 @@ so a caller cannot distinguish a forbidden room from a non-existent one
 (enumeration hardening — see ADR-004).
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from psycopg.errors import UniqueViolation
 from pydantic import BaseModel, Field
+from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -31,13 +34,25 @@ from app.logging_config import configure_logging, get_logger
 from app.middleware import CorrelationIdMiddleware, MetricsMiddleware
 from app.rag import answer
 from app.ratelimit import CHAT_RATE_LIMIT, limiter, rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+from app.tracing import shutdown_tracing
 
 # Initialize structured logging (Phase 5)
 configure_logging()
 log = get_logger(__name__)
 
-app = FastAPI(title="multi-tenant-rag-assistant")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """App lifespan: startup and shutdown hooks."""
+    # Startup — nothing special needed
+    yield
+    # Shutdown — flush pending Langfuse traces
+    log.info("shutdown_started")
+    shutdown_tracing()
+    log.info("shutdown_completed")
+
+
+app = FastAPI(title="multi-tenant-rag-assistant", lifespan=lifespan)
 
 # Rate limiting state (Phase 5 — LLM10 denial-of-wallet defense)
 app.state.limiter = limiter

@@ -31,18 +31,29 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         if request.url.path in ("/metrics", "/health"):
             return await call_next(request)
 
-        # Normalize endpoint path (strip IDs for cardinality control)
-        endpoint = self._normalize_path(request.url.path)
         method = request.method
-
         start = time.perf_counter()
-        response = await call_next(request)
+
+        try:
+            response = await call_next(request)
+            status = response.status_code
+        except Exception:
+            # Unhandled exception → record 500 before re-raising.
+            # ServerErrorMiddleware above us will catch it and return 500 to client,
+            # but we must record the metric HERE or it's invisible to Prometheus.
+            duration = time.perf_counter() - start
+            endpoint = self._get_endpoint(request)
+            http_requests_total.labels(method=method, endpoint=endpoint, status="500").inc()
+            http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+            raise
+
         duration = time.perf_counter() - start
+        endpoint = self._get_endpoint(request)
 
         http_requests_total.labels(
             method=method,
             endpoint=endpoint,
-            status=str(response.status_code),
+            status=str(status),
         ).inc()
 
         http_request_duration_seconds.labels(
@@ -53,16 +64,16 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         return response
 
     @staticmethod
-    def _normalize_path(path: str) -> str:
-        """Replace numeric path segments with {id} to limit label cardinality."""
-        parts = path.strip("/").split("/")
-        normalized = []
-        for part in parts:
-            if part.isdigit():
-                normalized.append("{id}")
-            else:
-                normalized.append(part)
-        return "/" + "/".join(normalized) if normalized else "/"
+    def _get_endpoint(request: Request) -> str:
+        """Get endpoint label from matched route, or 'unmatched' for 404s.
+
+        Uses the route template (e.g., '/rooms/{room_id}') instead of raw path.
+        Prevents cardinality explosion from scanner probes hitting random URLs.
+        """
+        route = request.scope.get("route")
+        if route is not None:
+            return route.path
+        return "unmatched"
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):

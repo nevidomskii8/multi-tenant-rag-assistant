@@ -8,8 +8,7 @@ Two limits are enforced:
 2. TPH (tokens per hour) — via check_token_budget() called after LLM response
 """
 
-import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -18,9 +17,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.config import settings
+from app.logging_config import get_logger
 from app.metrics import rate_limit_hits_total
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _get_user_id_or_ip(request: Request) -> str:
@@ -90,7 +90,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
         try:
             # Try to extract seconds from message like "Rate limit exceeded: 60 per 1 minute"
             parts = str(exc.detail).split()
-            for i, part in enumerate(parts):
+            for part in parts:
                 if part.isdigit():
                     retry_after = int(part)
                     break
@@ -137,7 +137,7 @@ def record_token_usage(user_id: int, tokens: int) -> tuple[int, bool]:
         return (0, False)
 
     # Key format: tokens:<user_id>:<hour> — expires after 1 hour
-    hour_key = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+    hour_key = datetime.now(UTC).strftime("%Y%m%d%H")
     key = f"tokens:{user_id}:{hour_key}"
 
     try:
@@ -166,7 +166,7 @@ def get_token_usage(user_id: int) -> int:
     if r is None:
         return 0
 
-    hour_key = datetime.now(timezone.utc).strftime("%Y%m%d%H")
+    hour_key = datetime.now(UTC).strftime("%Y%m%d%H")
     key = f"tokens:{user_id}:{hour_key}"
 
     try:

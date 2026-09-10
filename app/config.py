@@ -71,7 +71,9 @@ class Settings(BaseSettings):
             if not self.anthropic_api_key:
                 errors.append("ANTHROPIC_API_KEY is required in production")
             if not self.langfuse_secret_key or not self.langfuse_public_key:
-                errors.append("LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY are required in production")
+                errors.append(
+                    "LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY are required in production"
+                )
             if errors:
                 raise ValueError(f"Production configuration errors: {'; '.join(errors)}")
         return self
