@@ -137,8 +137,27 @@ project. Two goals drive every decision: practice **DevOps** and work through
     error. Migration `0005` admits the `flag` verdict.
   - *DoD met:* guardrails catch injected PII/jailbreaks and every decision is audited;
     `tests/test_guardrails.py` pins it (mocked) + live verification on the dev stack;
-    suite 25/25 green. **Open item:** PR `feat/phase3-guardrails → main` (code pushed).
-- **Next up — Phase 4 (red-team):** garak/PyRIT/Promptfoo/DeepTeam from Kali against
-  the app API. See `docs/roadmap.md` Phase 4.
+    suite 25/25 green.
+- **Phase 4 — DONE (DevSecOps scanners + red-team prep).** Security tooling in CI:
+  - **DevSecOps workflow:** trivy (container + SBOM), semgrep (SAST), gitleaks
+    (secrets) running in `.github/workflows/security.yml`.
+  - **Container hardening:** non-root user in Dockerfile, PEP8 compliance fixes.
+  - **Red-team tooling ready:** garak/PyRIT/Promptfoo/DeepTeam documented for Kali
+    lab runs against the app API.
+  - *DoD met:* security scanners green in CI; container runs non-root; red-team
+    tooling documented for Phase C agent attacks.
+- **Phase 5 — IN PROGRESS (observability).** Metrics, rate limiting, tracing:
+  - **Prometheus metrics:** `app/metrics.py` — HTTP, LLM, retrieval, guardrail,
+    rate-limit counters/histograms; cost tracking (LLM10 denial-of-wallet).
+  - **Rate limiting:** `app/ratelimit.py` — slowapi + Redis for RPM per user;
+    token budget tracking per hour (LLM10).
+  - **Tracing:** Langfuse integration (`app/tracing.py`) for LLM call observability.
+  - **Alerting:** Prometheus rules (`alerts.yml`) + Alertmanager for cost spikes,
+    error rates, guardrail-down detection.
+  - **Security fixes:** nginx blocks `/metrics` externally; no tenant IDs in labels
+    (cardinality + structure leakage); prod config validation.
+  - *In progress:* finalizing metrics instrumentation and documentation.
+- **Next up — Phase 6 (IaC/Terraform):** LocalStack for local AWS emulation, then
+  short cloud demos. See `docs/roadmap.md` Phase 6.
 - Keep this section current — it is the fastest way for a new session to know
   where we are.

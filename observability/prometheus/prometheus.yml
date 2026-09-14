@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # FastAPI app metrics
+  - job_name: 'app'
+    static_configs:
+      - targets: ['app:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # llm-guard sidecar (if it exposes metrics)
+  - job_name: 'llm-guard'
+    static_configs:
+      - targets: ['llm-guard-api:8000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    # Sidecar may not expose /metrics — tolerate failure
+    honor_labels: true
+    scrape_timeout: 5s

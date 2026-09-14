@@ -113,6 +113,13 @@ class _FakeBlock:
         self.text = text
 
 
+class _FakeUsage:
+    """Mock usage stats for metrics."""
+
+    input_tokens = 10
+    output_tokens = 20
+
+
 class _FakeClient:
     """Stand-in for the Anthropic client: returns a fixed text response."""
 
@@ -123,6 +130,7 @@ class _FakeClient:
     def create(self, **_):
         resp = type("R", (), {})()
         resp.content = [_FakeBlock(self._text)]
+        resp.usage = _FakeUsage()
         return resp
 
 
@@ -205,6 +213,8 @@ def test_chat_blocks_injected_input_and_audits(admin, monkeypatch):
     hdr = {"Authorization": f"Bearer {token}"}
     room_id = client.post("/rooms", json={"name": "r"}, headers=hdr).json()["room_id"]
 
+    # Enable guardrails for this test (defaults to False)
+    monkeypatch.setattr(settings, "guardrails_enabled", True)
     # Simulate the injection scanner tripping — no real sidecar call.
     monkeypatch.setattr(
         main, "scan_input", lambda _q: ScanResult(False, "", {"PromptInjection": 0.99}, "policy")
